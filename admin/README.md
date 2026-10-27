@@ -28,11 +28,14 @@ No Postgres to hand? One container is enough:
 
 ```sh
 docker run -d --name onexbet-postgres \
-  -e POSTGRES_USER=onexbet -e POSTGRES_PASSWORD=onexbet_dev_pw -e POSTGRES_DB=onexbet \
+  -e POSTGRES_USER=onexbet -e POSTGRES_PASSWORD="$PGPASS" -e POSTGRES_DB=onexbet \
   -p 5433:5432 --restart unless-stopped postgres:16-alpine
 ```
 
-…and point `DATABASE_URL` at `postgresql://onexbet:onexbet_dev_pw@localhost:5433/onexbet?schema=public`.
+…with `PGPASS` set to anything you like, then point `DATABASE_URL` at
+`postgresql://onexbet:<that password>@localhost:5433/onexbet?schema=public`.
+
+To put this somewhere public instead, see [../DEPLOY.md](../DEPLOY.md).
 
 The seed prints the credentials it created. By default:
 
