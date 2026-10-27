@@ -236,12 +236,47 @@ async function seedDemoData(adminId: string) {
   return { agent: fresh };
 }
 
+const DEFAULT_SEED_PASSWORD = "admin12345";
+
+/**
+ * Seeding a live deployment with demo agents, or with the password that is
+ * written in .env.example, would hand anyone who reads this repository an
+ * admin account. Fail closed instead.
+ */
+function guardProduction(wantsDemoData: boolean) {
+  const isProduction =
+    process.env.NODE_ENV === "production" ||
+    process.env.VERCEL_ENV === "production";
+  if (!isProduction) return;
+
+  const password = process.env.SEED_ADMIN_PASSWORD;
+  if (!password || password === DEFAULT_SEED_PASSWORD) {
+    throw new Error(
+      "Set SEED_ADMIN_PASSWORD to something private before seeding production.",
+    );
+  }
+  if (password.length < 12) {
+    throw new Error(
+      "SEED_ADMIN_PASSWORD must be at least 12 characters in production.",
+    );
+  }
+  if (wantsDemoData) {
+    throw new Error(
+      "Set SEED_DEMO_DATA=false in production — the demo agents share a known password.",
+    );
+  }
+}
+
 async function main() {
+  const wantsDemoData =
+    (process.env.SEED_DEMO_DATA || "true").toLowerCase() !== "false";
+  guardProduction(wantsDemoData);
+
   await seedSettings();
   const { admin, email, password } = await seedAdmin();
   console.log(`✔ admin ${email}`);
 
-  if ((process.env.SEED_DEMO_DATA || "true").toLowerCase() !== "false") {
+  if (wantsDemoData) {
     const { agent } = await seedDemoData(admin.id);
     console.log(
       `✔ demo agent ${agent.mobile} (password secret1) — balance ${formatInr(agent.balance)}`,

@@ -1,0 +1,14 @@
+# This project builds the Flutter web app only; the admin panel is a separate
+# Vercel project rooted at admin/.
+admin/
+
+# Not needed for a web build.
+android/
+ios/
+test/
+
+# Build output and local caches.
+build/
+.dart_tool/
+.idea/
+*.iml

@@ -12,7 +12,15 @@ const globalForPrisma = globalThis as unknown as {
 // the schema file.
 function createClient() {
   return new PrismaClient({
-    adapter: new PrismaPg({ connectionString: env.databaseUrl }),
+    adapter: new PrismaPg({
+      connectionString: env.databaseUrl,
+      // On a serverless host every warm instance keeps its own pool, so a
+      // handful of instances can exhaust Postgres' connection limit. Keep
+      // each pool tiny there and point DATABASE_URL at a pooler (Neon's
+      // -pooler host, Supabase's port 6543). Override with DATABASE_POOL_MAX.
+      max: Number(process.env.DATABASE_POOL_MAX ?? (env.isServerless ? 1 : 10)),
+      idleTimeoutMillis: 10_000,
+    }),
     log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
   });
 }

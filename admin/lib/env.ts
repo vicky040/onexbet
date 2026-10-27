@@ -32,6 +32,10 @@ export const env = {
   get isProduction() {
     return process.env.NODE_ENV === "production";
   },
+  /** True on Vercel and other function hosts, where pools must stay small. */
+  get isServerless() {
+    return Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+  },
 };
 
 export const ADMIN_COOKIE = "onexbet_admin_session";
