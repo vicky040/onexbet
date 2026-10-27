@@ -6,6 +6,16 @@ import { SidebarNav, type NavBadges } from "@/components/sidebar";
 import { getAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
+/**
+ * Every panel page reads live data behind a session, so none of them can be
+ * prerendered. Saying so explicitly keeps `next build` from attempting it —
+ * which otherwise queries the database during the build, and fails the build
+ * outright when the deployment's DATABASE_URL is not set yet.
+ *
+ * Applies to every segment nested under this layout.
+ */
+export const dynamic = "force-dynamic";
+
 export default async function PanelLayout({
   children,
 }: {

@@ -1,5 +1,17 @@
 # Deploying to Vercel
 
+## Live
+
+| | |
+| --- | --- |
+| Admin panel + API | https://onexbet-admin.vercel.app |
+| Agent website | https://onexbet-app.vercel.app |
+| Database | Neon Postgres (pooled endpoint) |
+
+Both are deployed from the CLI. There is no Git connection yet, so a push
+does **not** redeploy — run `vercel --prod` in `admin/` or at the root, or
+run `vercel git connect` once in each project to get automatic deploys.
+
 Two Vercel projects out of this one repository:
 
 | Project | Root directory | What it is |
@@ -169,6 +181,33 @@ That gives up automatic deploys on push.
 - [ ] The Android app points at the deployed API over HTTPS:
       `flutter build apk --release --dart-define=API_BASE_URL=https://onexbet-admin.vercel.app/api/v1`
       (the debug cleartext exception only covers localhost).
+
+## Things that bit during the first deploy
+
+**Do not create the project with `vercel project add` first.** Doing that
+sets Framework Preset to *Other*, and Vercel then serves the Next.js output
+as if it were a static site: the build succeeds, the route list prints, and
+every single URL answers 404 with `x-vercel-error: NOT_FOUND`. Either let
+`vercel deploy` create the project (it detects Next.js), or fix it after the
+fact:
+
+```sh
+echo '{"framework":"nextjs"}' > fw.json
+vercel api /v9/projects/onexbet-admin -X PATCH --input fw.json
+rm fw.json
+```
+
+Then redeploy. Check it with `vercel project inspect`, which prints the
+preset. The Flutter project is correctly *Other* — it is a static build
+driven by the root `vercel.json`.
+
+**Neon's `channel_binding=require` is not needed.** The connection string
+Neon offers includes it, and `node-postgres` prints a libpq-compatibility
+warning about `sslmode`. `?sslmode=require` on its own connects fine and
+still verifies the certificate, so that is what is set on the deployment.
+
+**Migrations need the direct endpoint.** Strip `-pooler` from the Neon host
+for `db:deploy` and `db:seed`; a pooled connection cannot run them.
 
 ## Things that will bite otherwise
 
