@@ -1,0 +1,12 @@
+# `integration` marks the tests that need the backend in admin/ running.
+# They skip themselves when it is unreachable, so a plain `flutter test`
+# stays green offline. To run only them:
+#
+#   flutter test --tags integration
+#
+# To leave them out entirely:
+#
+#   flutter test --exclude-tags integration
+tags:
+  integration:
+    timeout: 2x

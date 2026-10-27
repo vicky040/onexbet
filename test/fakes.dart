@@ -1,0 +1,308 @@
+import 'package:onexbet/data/models/bank_account.dart';
+import 'package:onexbet/data/models/dashboard_summary.dart';
+import 'package:onexbet/data/models/messages.dart';
+import 'package:onexbet/data/models/transactions.dart';
+import 'package:onexbet/data/models/txn_status.dart';
+import 'package:onexbet/data/models/user.dart';
+import 'package:onexbet/data/repositories/auth_repository.dart';
+import 'package:onexbet/data/repositories/bank_repository.dart';
+import 'package:onexbet/data/repositories/inbox_repository.dart';
+import 'package:onexbet/data/repositories/wallet_repository.dart';
+
+/// In-memory repositories for the widget tests.
+///
+/// The app itself has no fake data — it reads everything from the API. These
+/// stand in for the server so the tests stay fast and offline.
+
+const testMobile = '9876543210';
+const testPassword = 'secret1';
+
+const testUser = User(
+  id: 'agent-1',
+  name: 'Sam Tester',
+  mobile: testMobile,
+  email: 'sam@example.com',
+);
+
+class FakeAuthRepository implements AuthRepository {
+  FakeAuthRepository({User? signedInAs}) : _current = signedInAs;
+
+  User? _current;
+  PasswordResetChallenge? lastChallenge;
+
+  @override
+  Future<User?> currentUser() async => _current;
+
+  @override
+  Future<User> login({
+    required String mobile,
+    required String password,
+  }) async {
+    if (mobile != testMobile || password != testPassword) {
+      throw const AuthException('Incorrect mobile number or password');
+    }
+    return _current = testUser;
+  }
+
+  @override
+  Future<SignupResult> signup({
+    required String name,
+    required String mobile,
+    required String email,
+    required String password,
+  }) async {
+    final user = User(name: name, mobile: mobile, email: email);
+    _current = user;
+    return SignupResult(user: user, pendingApproval: false);
+  }
+
+  @override
+  Future<PasswordResetChallenge> requestPasswordReset({
+    required String mobile,
+  }) async {
+    return lastChallenge = const PasswordResetChallenge(
+      resetToken: 'reset-token',
+      expiresInMinutes: 10,
+      devOtp: '123456',
+    );
+  }
+
+  @override
+  Future<void> confirmPasswordReset({
+    required String resetToken,
+    required String otp,
+    required String newPassword,
+  }) async {
+    if (otp != '123456') {
+      throw const AuthException('Incorrect code. 4 attempt(s) left.');
+    }
+    _current = null;
+  }
+
+  @override
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    if (currentPassword != testPassword) {
+      throw const AuthException('Current password is incorrect');
+    }
+  }
+
+  @override
+  Future<void> logout() async => _current = null;
+}
+
+class FakeWalletRepository implements WalletRepository {
+  FakeWalletRepository({this.openPayoutList = const []});
+
+  final List<OpenPayout> openPayoutList;
+
+  @override
+  Future<DashboardSummary> summary() async => const DashboardSummary(
+        totalBalance: 140474.93,
+        successRate: 24,
+        securityDepositUsdt: 1000,
+        payinCommission: 403922.93,
+        payoutCommission: 60304,
+        totalPayin: 7344052,
+        totalDeposit: 4005100,
+        payoutsCredited: 0,
+      );
+
+  @override
+  Future<List<EarningWeek>> earnings() async => const [
+        EarningWeek(
+          week: 1,
+          maskedTransactions: '98******23',
+          netEarnings: 500000,
+          transactions: 12,
+        ),
+        EarningWeek(
+          week: 2,
+          maskedTransactions: '87******22',
+          netEarnings: 400000,
+          transactions: 9,
+        ),
+      ];
+
+  @override
+  Future<List<PayinRecord>> payins() async => [
+        PayinRecord(
+          id: 'APE0Q8VYQV7L',
+          createdAt: DateTime(2026, 10, 16, 13, 49),
+          previousBalance: 135277.43,
+          amount: 5500,
+          commissionRate: 5.5,
+          commission: 302.50,
+          afterBalance: 140474.93,
+          txnRef: '628981974812',
+        ),
+      ];
+
+  @override
+  Future<List<OpenPayout>> openPayouts() async => openPayoutList;
+
+  @override
+  Future<List<PayoutPayment>> payoutPayments() async => [
+        PayoutPayment(
+          id: 'LBS0JCLO28RO',
+          createdAt: DateTime(2026, 10, 16, 11, 11),
+          amount: 65000,
+          commission: 1300,
+          status: TxnStatus.paymentReceived,
+        ),
+      ];
+
+  @override
+  Future<List<DepositRecord>> deposits() async => [
+        DepositRecord(
+          id: 'TXNUGAIDXBWU3',
+          createdAt: DateTime(2026, 10, 14, 16, 22),
+          previousBalance: 6115.93,
+          amount: 205600,
+          afterBalance: 211715.93,
+          status: TxnStatus.completed,
+          utr: '428716503921',
+        ),
+      ];
+
+  @override
+  Future<DepositRecord> createDeposit({
+    required double amount,
+    required String utr,
+  }) async {
+    return DepositRecord(
+      id: 'TXNNEW000001',
+      createdAt: DateTime.now(),
+      previousBalance: 140474.93,
+      amount: amount,
+      afterBalance: 140474.93 + amount,
+      status: TxnStatus.pending,
+      utr: utr,
+    );
+  }
+}
+
+class FakeBankRepository implements BankRepository {
+  FakeBankRepository() {
+    _banks = [
+      const BankAccount(
+        id: 'b1',
+        bankName: 'State Bank of India',
+        accountHolder: 'Sam Tester',
+        accountNumber: '30112233967',
+        ifsc: 'SBIN0001234',
+        upiId: 'demo.sbi@oksbi',
+        limit: 40000,
+        amountLimit: 40000,
+        txnLimit: 40000,
+      ),
+      const BankAccount(
+        id: 'b2',
+        bankName: 'Union Bank',
+        accountHolder: 'Sam Tester',
+        accountNumber: '520101000857',
+        ifsc: 'UBIN0530101',
+        upiId: 'demo.union@ybl',
+        limit: 500000,
+        amountLimit: 100000,
+        txnLimit: 500000,
+      ),
+    ];
+  }
+
+  late List<BankAccount> _banks;
+
+  @override
+  Future<List<BankAccount>> banks() async => List.unmodifiable(_banks);
+
+  @override
+  Future<BankAccount> save(BankAccount bank) async {
+    if (bank.id.isEmpty) {
+      final created = bank.copyWith(id: 'b${_banks.length + 1}');
+      _banks = [..._banks, created];
+      return created;
+    }
+    _banks = [
+      for (final b in _banks) b.id == bank.id ? bank : b,
+    ];
+    return bank;
+  }
+
+  @override
+  Future<void> setActive(String id, bool isActive) async {
+    _banks = [
+      for (final b in _banks)
+        b.id == id ? b.copyWith(isActive: isActive) : b,
+    ];
+  }
+
+  @override
+  Future<void> delete(String id) async {
+    _banks = _banks.where((b) => b.id != id).toList();
+  }
+}
+
+class FakeInboxRepository implements InboxRepository {
+  List<AppNotification> _notifications = [
+    AppNotification(
+      id: 'n1',
+      title: 'Payin received',
+      body: '₹5500.00 credited to your wallet.',
+      createdAt: DateTime(2026, 10, 16, 13, 49),
+    ),
+  ];
+
+  List<ChatMessage> _messages = [
+    ChatMessage(
+      id: 'm1',
+      text: 'Hi! Welcome to 1XBET agent support. How can we help you today?',
+      fromUser: false,
+      createdAt: DateTime(2026, 10, 16, 9, 0),
+    ),
+  ];
+
+  @override
+  Future<List<AppNotification>> notifications() async =>
+      List.unmodifiable(_notifications);
+
+  @override
+  Future<void> markRead(String id) async {
+    _notifications = [
+      for (final n in _notifications)
+        n.id == id ? n.copyWith(read: true) : n,
+    ];
+  }
+
+  @override
+  Future<void> markAllRead() async {
+    _notifications = [
+      for (final n in _notifications) n.copyWith(read: true),
+    ];
+  }
+
+  @override
+  Future<List<ChatMessage>> supportMessages() async =>
+      List.unmodifiable(_messages);
+
+  @override
+  Future<List<ChatMessage>> sendSupportMessage(String text) async {
+    _messages = [
+      ..._messages,
+      ChatMessage(
+        id: 'm${_messages.length + 1}',
+        text: text,
+        fromUser: true,
+        createdAt: DateTime.now(),
+      ),
+      ChatMessage(
+        id: 'm${_messages.length + 2}',
+        text: 'Thanks for reaching out! A support agent will reply shortly.',
+        fromUser: false,
+        createdAt: DateTime.now(),
+      ),
+    ];
+    return List.unmodifiable(_messages);
+  }
+}
