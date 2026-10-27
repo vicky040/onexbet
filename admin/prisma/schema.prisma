@@ -1,0 +1,298 @@
+// 1XBET agent platform — admin panel + API for the Flutter agent app.
+//
+// Money is stored as Decimal(14,2) so balances never drift; percentages as
+// Decimal(5,2) (e.g. 5.50 for 5.5%). Reference codes (`reference`) are the
+// human-facing transaction ids the Flutter app renders as the record title.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// The connection URL lives in prisma.config.ts (CLI) and is passed to
+// PrismaClient as a driver adapter at runtime — see lib/db.ts.
+datasource db {
+  provider = "postgresql"
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  OPERATOR
+}
+
+enum AgentStatus {
+  PENDING
+  ACTIVE
+  BLOCKED
+}
+
+/// Mirrors TxnStatus in the Flutter app (lib/data/models/txn_status.dart).
+enum TxnStatus {
+  COMPLETED
+  PAYMENT_RECEIVED
+  PENDING
+  FAILED
+}
+
+/// OPEN payouts are the ones the Flutter "Payouts" tab offers to agents.
+/// Everything else shows up under "My Payments".
+enum PayoutStatus {
+  OPEN
+  ACCEPTED
+  PAYMENT_RECEIVED
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model Admin {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  role         AdminRole @default(OPERATOR)
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  reviewedDeposits Deposit[]        @relation("DepositReviewer")
+  createdPayouts   Payout[]         @relation("PayoutCreator")
+  createdPayins    Payin[]          @relation("PayinCreator")
+  supportReplies   SupportMessage[]
+  sentNotices      Notification[]
+  auditLogs        AuditLog[]
+
+  @@index([email])
+}
+
+model Agent {
+  id                   String      @id @default(cuid())
+  /// 10-digit Indian mobile number; the agent's login identity.
+  mobile               String      @unique
+  name                 String
+  email                String
+  passwordHash         String
+  status               AgentStatus @default(ACTIVE)
+  balance              Decimal     @default(0) @db.Decimal(14, 2)
+  securityDepositUsdt  Decimal     @default(0) @db.Decimal(14, 2)
+  /// Percentage the agent earns on each payin, e.g. 5.50.
+  payinCommissionRate  Decimal     @default(5.50) @db.Decimal(5, 2)
+  payoutCommissionRate Decimal     @default(2.00) @db.Decimal(5, 2)
+  notes                String?
+  lastLoginAt          DateTime?
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  bankAccounts    BankAccount[]
+  payins          Payin[]
+  payouts         Payout[]
+  deposits        Deposit[]
+  notifications   Notification[]
+  supportMessages SupportMessage[]
+  refreshTokens   RefreshToken[]
+  passwordResets  PasswordReset[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model BankAccount {
+  id            String   @id @default(cuid())
+  agentId       String
+  bankName      String
+  accountHolder String
+  accountNumber String
+  ifsc          String
+  upiId         String
+  /// "Daily limit" in the Flutter bank form.
+  dailyLimit    Int      @default(0)
+  amountLimit   Decimal  @default(0) @db.Decimal(14, 2)
+  txnLimit      Int      @default(0)
+  isActive      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  agent  Agent   @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  payins Payin[]
+
+  @@unique([agentId, accountNumber])
+  @@index([agentId])
+}
+
+model Payin {
+  id              String    @id @default(cuid())
+  /// Record id shown in the app, e.g. APE0Q8VYQV7L.
+  reference       String    @unique
+  agentId         String
+  bankAccountId   String?
+  previousBalance Decimal   @db.Decimal(14, 2)
+  amount          Decimal   @db.Decimal(14, 2)
+  commissionRate  Decimal   @db.Decimal(5, 2)
+  commission      Decimal   @db.Decimal(14, 2)
+  afterBalance    Decimal   @db.Decimal(14, 2)
+  /// Bank/UPI reference of the player's transfer.
+  txnRef          String
+  status          TxnStatus @default(COMPLETED)
+  createdById     String?
+  createdAt       DateTime  @default(now())
+
+  agent       Agent        @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  bankAccount BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
+  createdBy   Admin?       @relation("PayinCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([agentId, createdAt])
+  @@index([createdAt])
+}
+
+model Payout {
+  id             String       @id @default(cuid())
+  /// Record id shown in the app, e.g. LBS0JCLO28RO.
+  reference      String       @unique
+  /// Null while the payout is offered to every agent.
+  agentId        String?
+  amount         Decimal      @db.Decimal(14, 2)
+  commissionRate Decimal      @db.Decimal(5, 2)
+  commission     Decimal      @db.Decimal(14, 2)
+  /// Where the agent must send the money.
+  upiId          String
+  status         PayoutStatus @default(OPEN)
+  note           String?
+  createdById    String?
+  acceptedAt     DateTime?
+  paidAt         DateTime?
+  settledAt      DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  agent     Agent? @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  createdBy Admin? @relation("PayoutCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([agentId, status])
+  @@index([status, createdAt])
+}
+
+model Deposit {
+  id              String    @id @default(cuid())
+  /// Record id shown in the app, e.g. TXNUGAIDXBWU3.
+  reference       String    @unique
+  agentId         String
+  previousBalance Decimal   @db.Decimal(14, 2)
+  amount          Decimal   @db.Decimal(14, 2)
+  /// Only set once the deposit is approved.
+  afterBalance    Decimal?  @db.Decimal(14, 2)
+  status          TxnStatus @default(PENDING)
+  utr             String
+  proofUrl        String?
+  reviewedById    String?
+  reviewedAt      DateTime?
+  reviewNote      String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  agent      Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  reviewedBy Admin? @relation("DepositReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([agentId, createdAt])
+  @@index([status, createdAt])
+}
+
+model Notification {
+  id          String    @id @default(cuid())
+  agentId     String
+  title       String
+  body        String
+  read        Boolean   @default(false)
+  readAt      DateTime?
+  /// Groups the rows written by one admin broadcast.
+  broadcastId String?
+  createdById String?
+  createdAt   DateTime  @default(now())
+
+  agent     Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  createdBy Admin? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([agentId, createdAt])
+  @@index([broadcastId])
+}
+
+model SupportMessage {
+  id        String   @id @default(cuid())
+  agentId   String
+  text      String
+  /// True when the agent wrote it (ChatMessage.fromUser in Flutter).
+  fromAgent Boolean
+  adminId   String?
+  readByAdmin Boolean @default(false)
+  createdAt DateTime @default(now())
+
+  agent Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  admin Admin? @relation(fields: [adminId], references: [id], onDelete: SetNull)
+
+  @@index([agentId, createdAt])
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  agentId   String
+  /// SHA-256 of the token; the raw value only ever leaves in the response.
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId])
+}
+
+/// A password reset in progress: the agent proves ownership of the mobile
+/// number with a one-time code before the new password is accepted.
+model PasswordReset {
+  id         String    @id @default(cuid())
+  agentId    String
+  /// SHA-256 of the reset token handed to the client.
+  tokenHash  String    @unique
+  /// SHA-256 of the 6-digit code sent to the agent's mobile.
+  otpHash    String
+  attempts   Int       @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId])
+}
+
+/// Single row, id "default".
+model Settings {
+  id                          String   @id @default("default")
+  defaultPayinCommissionRate  Decimal  @default(5.50) @db.Decimal(5, 2)
+  defaultPayoutCommissionRate Decimal  @default(2.00) @db.Decimal(5, 2)
+  minDepositAmount            Decimal  @default(100) @db.Decimal(14, 2)
+  requiredSecurityDepositUsdt Decimal  @default(1000) @db.Decimal(14, 2)
+  supportWelcomeMessage       String   @default("Hi! Welcome to 1XBET agent support. How can we help you today?")
+  signupsEnabled              Boolean  @default(true)
+  /// Approve agent deposits the moment they are submitted.
+  autoApproveDeposits         Boolean  @default(false)
+  /// New agents land in PENDING and cannot log in until an admin approves.
+  requireAgentApproval        Boolean  @default(false)
+  updatedAt                   DateTime @updatedAt
+}
+
+model AuditLog {
+  id       String   @id @default(cuid())
+  adminId  String?
+  /// e.g. "deposit.approve", "agent.block".
+  action   String
+  entity   String
+  entityId String?
+  summary  String
+  meta     Json?
+  createdAt DateTime @default(now())
+
+  admin Admin? @relation(fields: [adminId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([entity, entityId])
+}
