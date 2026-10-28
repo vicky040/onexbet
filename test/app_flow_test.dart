@@ -340,6 +340,26 @@ void main() {
       expect(find.text('Total balance'), findsOneWidget);
     });
 
+    testWidgets('the promotion shows on the sign-in screen too',
+        (tester) async {
+      await pumpApp(
+        tester,
+        content: FakeContentRepository(
+          welcomeEnabled: true,
+          promoEnabled: true,
+        ),
+      );
+
+      // Signed out: the ad runs, the dialog does not.
+      expect(find.text('Welcome back'), findsOneWidget);
+      expect(find.text('Bet on every match, live on 1XBET'), findsOneWidget);
+      expect(find.text('Welcome to 1XBET Agent'), findsNothing);
+
+      await tester.tap(find.byKey(const Key('closePromo')));
+      await tester.pumpAndSettle();
+      expect(find.text('Bet on every match, live on 1XBET'), findsNothing);
+    });
+
     testWidgets('the promotion shows on Home and can be dismissed',
         (tester) async {
       await pumpApp(

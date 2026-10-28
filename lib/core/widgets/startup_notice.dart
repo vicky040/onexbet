@@ -166,11 +166,16 @@ class WelcomeDialog extends StatelessWidget {
   }
 }
 
-/// The dismissible promotion on the Home screen.
+/// The dismissible promotion.
+///
+/// It appears on the sign-in screen and on Home, which have opposite
+/// backgrounds, so [onDark] picks the colours rather than leaving white
+/// text on a white card.
 class PromoBanner extends StatefulWidget {
-  const PromoBanner({super.key, required this.promo});
+  const PromoBanner({super.key, required this.promo, this.onDark = false});
 
   final PromoNotice promo;
+  final bool onDark;
 
   @override
   State<PromoBanner> createState() => _PromoBannerState();
@@ -194,8 +199,9 @@ class _PromoBannerState extends State<PromoBanner> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 18),
       child: Material(
-        // Home is a light surface, unlike the navy sign-in screen.
-        color: AppColors.white,
+        color: widget.onDark
+            ? AppColors.white.withValues(alpha: 0.10)
+            : AppColors.white,
         borderRadius: BorderRadius.circular(22),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
@@ -237,17 +243,21 @@ class _PromoBannerState extends State<PromoBanner> {
                       padding: const EdgeInsets.fromLTRB(16, 14, 48, 14),
                       child: Row(
                         children: [
-                          const Icon(
+                          Icon(
                             Icons.campaign_rounded,
-                            color: AppColors.primaryBlue,
+                            color: widget.onDark
+                                ? AppColors.brandBlue
+                                : AppColors.primaryBlue,
                             size: 24,
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
                               widget.promo.headline,
-                              style: const TextStyle(
-                                color: AppColors.navy,
+                              style: TextStyle(
+                                color: widget.onDark
+                                    ? AppColors.white
+                                    : AppColors.navy,
                                 fontSize: 14.5,
                                 fontWeight: FontWeight.w700,
                                 height: 1.35,
@@ -255,9 +265,11 @@ class _PromoBannerState extends State<PromoBanner> {
                             ),
                           ),
                           if (widget.promo.hasLink)
-                            const Icon(
+                            Icon(
                               Icons.chevron_right_rounded,
-                              color: AppColors.textMuted,
+                              color: widget.onDark
+                                  ? AppColors.white.withValues(alpha: 0.7)
+                                  : AppColors.textMuted,
                             ),
                         ],
                       ),
@@ -271,9 +283,13 @@ class _PromoBannerState extends State<PromoBanner> {
                   key: const Key('closePromo'),
                   tooltip: 'Close',
                   iconSize: 18,
-                  color: AppColors.textMuted,
+                  color: widget.onDark
+                      ? AppColors.white
+                      : AppColors.textMuted,
                   style: IconButton.styleFrom(
-                    backgroundColor: AppColors.pillBg,
+                    backgroundColor: widget.onDark
+                        ? Colors.black.withValues(alpha: 0.3)
+                        : AppColors.pillBg,
                     minimumSize: const Size(30, 30),
                     padding: EdgeInsets.zero,
                   ),

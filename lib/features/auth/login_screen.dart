@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/router/routes.dart';
+import '../../core/widgets/startup_notice.dart';
 import '../../core/widgets/buttons.dart';
 import '../../core/widgets/form_fields.dart';
 import '../../data/repositories/auth_repository.dart';
+import '../../data/providers.dart';
 import 'auth_controller.dart';
 import 'widgets/auth_scaffold.dart';
 
@@ -53,6 +55,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         action: 'Sign up',
         onTap: () => context.go(Routes.signup),
       ),
+      // The promotion is for everyone; the welcome dialog is not, because
+      // what it asks for can only be done once signed in.
+      banner: ref.watch(appContentProvider).maybeWhen(
+            data: (content) => content.promo.isVisible
+                ? PromoBanner(promo: content.promo, onDark: true)
+                : null,
+            orElse: () => null,
+          ),
       child: AutofillGroup(
         child: Form(
           key: _formKey,
