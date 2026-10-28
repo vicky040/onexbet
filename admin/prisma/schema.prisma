@@ -300,6 +300,18 @@ model Settings {
   autoApproveDeposits         Boolean  @default(false)
   /// New agents land in PENDING and cannot log in until an admin approves.
   requireAgentApproval        Boolean  @default(false)
+
+  // --- What the app shows on startup, before anyone signs in ---------------
+  /// The "what is this" dialog. The joining figure it quotes is
+  /// minDepositUsdt, so there is only ever one number to change.
+  welcomeEnabled              Boolean  @default(true)
+  welcomeTitle                String   @default("Welcome to 1XBET Agent")
+  welcomeBody                 String   @default("1XBET agents collect player deposits and pay out withdrawals through their own bank accounts, earning commission on every transaction. Your balance is the float you work with: top it up, and it is credited once we have verified the payment.")
+  /// A dismissible promotion on the sign-in screen.
+  promoEnabled                Boolean  @default(false)
+  promoHeadline               String   @default("")
+  promoImageUrl               String   @default("")
+  promoLinkUrl                String   @default("")
   updatedAt                   DateTime @updatedAt
 }
 

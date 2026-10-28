@@ -189,6 +189,13 @@ export function adminSettings(settings: Settings) {
     signupsEnabled: settings.signupsEnabled,
     autoApproveDeposits: settings.autoApproveDeposits,
     requireAgentApproval: settings.requireAgentApproval,
+    welcomeEnabled: settings.welcomeEnabled,
+    welcomeTitle: settings.welcomeTitle,
+    welcomeBody: settings.welcomeBody,
+    promoEnabled: settings.promoEnabled,
+    promoHeadline: settings.promoHeadline,
+    promoImageUrl: settings.promoImageUrl,
+    promoLinkUrl: settings.promoLinkUrl,
     updatedAt: iso(settings.updatedAt),
   };
 }

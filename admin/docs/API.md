@@ -64,6 +64,23 @@ Failure:
 
 # Agent API (`/api/v1`)
 
+## `GET /app-content`
+
+**No auth.** The welcome dialog and the promotion shown on the sign-in
+screen, where there is nobody signed in yet. Returns only copy meant to be
+read by the public.
+
+```json
+{ "welcome": { "enabled": true, "title": "Welcome to 1XBET Agent",
+               "body": "…", "joiningMinimumUsdt": 3000,
+               "joiningMinimumInr": 285000 },
+  "promo":   { "enabled": false, "headline": "", "imageUrl": "", "linkUrl": "" } }
+```
+
+`joiningMinimumUsdt` is the deposit minimum, so the figure the dialog quotes
+can never drift from the one the deposit endpoint enforces. Both halves are
+written by a super admin under **Settings**, and either can be switched off.
+
 ## `GET /health`
 
 No auth. Confirms the server is up and Postgres is reachable.

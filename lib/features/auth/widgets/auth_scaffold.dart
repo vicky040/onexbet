@@ -13,6 +13,7 @@ class AuthScaffold extends StatelessWidget {
     required this.subtitle,
     required this.child,
     this.footer,
+    this.banner,
     this.showBack = false,
   });
 
@@ -20,6 +21,9 @@ class AuthScaffold extends StatelessWidget {
   final String subtitle;
   final Widget child;
   final Widget? footer;
+
+  /// Optional content above the form card — the promotion, for instance.
+  final Widget? banner;
   final bool showBack;
 
   @override
@@ -60,6 +64,7 @@ class AuthScaffold extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 28),
+                  ?banner,
                   Container(
                     padding: const EdgeInsets.fromLTRB(22, 26, 22, 22),
                     decoration: BoxDecoration(

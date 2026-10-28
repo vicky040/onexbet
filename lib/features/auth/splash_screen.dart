@@ -15,8 +15,9 @@ class SplashComplete extends Notifier<bool> {
   void complete() => state = true;
 }
 
-final splashCompleteProvider =
-    NotifierProvider<SplashComplete, bool>(SplashComplete.new);
+final splashCompleteProvider = NotifierProvider<SplashComplete, bool>(
+  SplashComplete.new,
+);
 
 /// Animated launch screen. The logo starts exactly where the native splash
 /// draws it (centred, 170dp wide) so the hand-off is seamless.
@@ -44,11 +45,17 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
   late final _scale = TweenSequence<double>([
     TweenSequenceItem(
-      tween: Tween(begin: 1.0, end: 1.12).chain(CurveTween(curve: Curves.easeOut)),
+      tween: Tween(
+        begin: 1.0,
+        end: 1.12,
+      ).chain(CurveTween(curve: Curves.easeOut)),
       weight: 25,
     ),
     TweenSequenceItem(
-      tween: Tween(begin: 1.12, end: 1.0).chain(CurveTween(curve: Curves.easeInOut)),
+      tween: Tween(
+        begin: 1.12,
+        end: 1.0,
+      ).chain(CurveTween(curve: Curves.easeInOut)),
       weight: 20,
     ),
     TweenSequenceItem(tween: ConstantTween(1.0), weight: 55),
@@ -95,73 +102,80 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
         backgroundColor: AppColors.navy,
-        body: Stack(
-          alignment: Alignment.center,
-          children: [
-            AnimatedBuilder(
-              animation: _rings,
-              builder: (_, _) => CustomPaint(
-                size: const Size.square(320),
-                painter: _RingsPainter(_rings.value),
-              ),
-            ),
-            ScaleTransition(
-              scale: _scale,
-              child: AnimatedBuilder(
-                animation: _shimmer,
-                builder: (_, child) => ShaderMask(
-                  blendMode: BlendMode.srcATop,
-                  shaderCallback: (rect) => _shimmerGradient(_shimmer.value)
-                      .createShader(rect),
-                  child: child,
-                ),
-                child: Image.asset(
-                  SplashScreen.logoAsset,
-                  width: SplashScreen.logoWidth,
-                  semanticLabel: '1XBET',
+        // The Stack sizes itself to the ring painter (320x320) rather than
+        // the window, so without this it sits in the top-left corner on any
+        // screen bigger than that — obvious in a browser.
+        body: Center(
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              AnimatedBuilder(
+                animation: _rings,
+                builder: (_, _) => CustomPaint(
+                  size: const Size.square(320),
+                  painter: _RingsPainter(_rings.value),
                 ),
               ),
-            ),
-            Transform.translate(
-              offset: const Offset(0, 62),
-              child: FadeTransition(
-                opacity: _tagline,
-                child: SlideTransition(
-                  position: Tween(
-                    begin: const Offset(0, 0.6),
-                    end: Offset.zero,
-                  ).animate(_tagline),
-                  child: Text(
-                    'AGENT PANEL',
-                    style: TextStyle(
-                      color: AppColors.white.withValues(alpha: 0.75),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 4,
+              ScaleTransition(
+                scale: _scale,
+                child: AnimatedBuilder(
+                  animation: _shimmer,
+                  builder: (_, child) => ShaderMask(
+                    blendMode: BlendMode.srcATop,
+                    shaderCallback: (rect) =>
+                        _shimmerGradient(_shimmer.value).createShader(rect),
+                    child: child,
+                  ),
+                  child: Image.asset(
+                    SplashScreen.logoAsset,
+                    width: SplashScreen.logoWidth,
+                    semanticLabel: '1XBET',
+                  ),
+                ),
+              ),
+              Transform.translate(
+                offset: const Offset(0, 62),
+                child: FadeTransition(
+                  opacity: _tagline,
+                  child: SlideTransition(
+                    position: Tween(
+                      begin: const Offset(0, 0.6),
+                      end: Offset.zero,
+                    ).animate(_tagline),
+                    child: Text(
+                      'AGENT PANEL',
+                      style: TextStyle(
+                        color: AppColors.white.withValues(alpha: 0.75),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 4,
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-            Transform.translate(
-              offset: const Offset(0, 104),
-              child: SizedBox(
-                width: 120,
-                height: 3,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(2),
-                  child: AnimatedBuilder(
-                    animation: _progress,
-                    builder: (_, _) => LinearProgressIndicator(
-                      value: _progress.value,
-                      backgroundColor: AppColors.white.withValues(alpha: 0.12),
-                      color: AppColors.brandBlue,
+              Transform.translate(
+                offset: const Offset(0, 104),
+                child: SizedBox(
+                  width: 120,
+                  height: 3,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(2),
+                    child: AnimatedBuilder(
+                      animation: _progress,
+                      builder: (_, _) => LinearProgressIndicator(
+                        value: _progress.value,
+                        backgroundColor: AppColors.white.withValues(
+                          alpha: 0.12,
+                        ),
+                        color: AppColors.brandBlue,
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

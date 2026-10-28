@@ -523,6 +523,13 @@ export async function updateSettingsAction(
       signupsEnabled: bool(form, "signupsEnabled"),
       autoApproveDeposits: bool(form, "autoApproveDeposits"),
       requireAgentApproval: bool(form, "requireAgentApproval"),
+      welcomeEnabled: bool(form, "welcomeEnabled"),
+      welcomeTitle: str(form, "welcomeTitle"),
+      welcomeBody: str(form, "welcomeBody"),
+      promoEnabled: bool(form, "promoEnabled"),
+      promoHeadline: form.get("promoHeadline")?.toString().trim() ?? "",
+      promoImageUrl: form.get("promoImageUrl")?.toString().trim() ?? "",
+      promoLinkUrl: form.get("promoLinkUrl")?.toString().trim() ?? "",
     });
 
     await prisma.settings.update({ where: { id: "default" }, data: body });

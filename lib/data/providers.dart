@@ -4,9 +4,11 @@ import '../core/config/app_config.dart';
 import 'api/api_client.dart';
 import 'api/http_auth_repository.dart';
 import 'api/http_bank_repository.dart';
+import 'api/http_content_repository.dart';
 import 'api/http_inbox_repository.dart';
 import 'api/http_wallet_repository.dart';
 import 'api/token_store.dart';
+import 'models/app_content.dart';
 import 'models/bank_account.dart';
 import 'models/dashboard_summary.dart';
 import 'models/deposit_config.dart';
@@ -14,6 +16,7 @@ import 'models/messages.dart';
 import 'models/transactions.dart';
 import 'repositories/auth_repository.dart';
 import 'repositories/bank_repository.dart';
+import 'repositories/content_repository.dart';
 import 'repositories/inbox_repository.dart';
 import 'repositories/wallet_repository.dart';
 
@@ -55,6 +58,10 @@ final inboxRepositoryProvider = Provider<InboxRepository>(
   (ref) => HttpInboxRepository(ref.watch(apiClientProvider)),
 );
 
+final contentRepositoryProvider = Provider<ContentRepository>(
+  (ref) => HttpContentRepository(ref.watch(apiClientProvider)),
+);
+
 // ---------------------------------------------------------------------------
 // Read-only data
 // ---------------------------------------------------------------------------
@@ -66,6 +73,24 @@ final summaryProvider = FutureProvider<DashboardSummary>(
 final earningsProvider = FutureProvider<List<EarningWeek>>(
   (ref) => ref.watch(walletRepositoryProvider).earnings(),
 );
+
+/// The welcome dialog and promotion shown before sign-in. Read without a
+/// token, so it works on the sign-in screen.
+final appContentProvider = FutureProvider<AppContent>(
+  (ref) => ref.watch(contentRepositoryProvider).appContent(),
+);
+
+/// Whether the startup dialog has already been shown this launch — it should
+/// appear once, not on every rebuild of the sign-in screen.
+class StartupNoticeSeen extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void markSeen() => state = true;
+}
+
+final startupNoticeSeenProvider =
+    NotifierProvider<StartupNoticeSeen, bool>(StartupNoticeSeen.new);
 
 /// Currencies, minimums and the USDT address, as the server describes them.
 final depositConfigProvider = FutureProvider<DepositConfig>(

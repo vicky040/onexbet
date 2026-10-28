@@ -9,6 +9,7 @@ import 'package:onexbet/data/api/token_store.dart';
 import 'package:onexbet/data/providers.dart';
 import 'package:onexbet/data/repositories/auth_repository.dart';
 import 'package:onexbet/data/repositories/bank_repository.dart';
+import 'package:onexbet/data/repositories/content_repository.dart';
 import 'package:onexbet/data/repositories/inbox_repository.dart';
 import 'package:onexbet/data/repositories/wallet_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -35,6 +36,7 @@ Future<void> pumpApp(
   WalletRepository? wallet,
   BankRepository? bank,
   InboxRepository? inbox,
+  ContentRepository? content,
 }) async {
   SharedPreferences.setMockInitialValues({});
   tester.view.physicalSize = const Size(1080, 2340);
@@ -61,6 +63,11 @@ Future<void> pumpApp(
         bankRepositoryProvider.overrideWithValue(bank ?? FakeBankRepository()),
         inboxRepositoryProvider
             .overrideWithValue(inbox ?? FakeInboxRepository()),
+        // Off by default: most tests are not about the startup dialog, and
+        // a modal over the screen would get in their way.
+        contentRepositoryProvider.overrideWithValue(
+          content ?? FakeContentRepository(welcomeEnabled: false),
+        ),
       ],
       child: const OnexbetApp(),
     ),

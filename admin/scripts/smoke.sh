@@ -39,6 +39,18 @@ check() { # name expected actual
 echo "=== health ==="
 check "health ok" "ok" "$(curl -s $BASE/api/v1/health | j data.status)"
 
+echo "=== startup content (no token needed) ==="
+CONTENT=$(curl -s $BASE/api/v1/app-content)
+check "app-content is readable signed out" "true" "$(echo "$CONTENT" | j ok)"
+check "welcome notice has a title" "yes" \
+  "$(echo "$CONTENT" | j data.welcome.title | grep -q . && echo yes || echo no)"
+check "joining minimum matches the deposit minimum" "yes" \
+  "$(node -e "console.log($(echo "$CONTENT" | j data.welcome.joiningMinimumUsdt) === 3000 ? 'yes' : 'no')")"
+check "joining minimum is also quoted in rupees" "yes" \
+  "$(node -e "console.log($(echo "$CONTENT" | j data.welcome.joiningMinimumInr) > 0 ? 'yes' : 'no')")"
+check "promo block is present" "yes" \
+  "$(echo "$CONTENT" | j data.promo.enabled | grep -qE 'true|false' && echo yes || echo no)"
+
 echo "=== agent auth ==="
 check "login rejects bad password" "invalid_credentials" \
   "$(curl -s -X POST $BASE/api/v1/auth/login -H 'content-type: application/json' \

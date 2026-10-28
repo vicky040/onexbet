@@ -304,4 +304,15 @@ export const updateSettingsSchema = z.object({
   signupsEnabled: z.boolean().optional(),
   autoApproveDeposits: z.boolean().optional(),
   requireAgentApproval: z.boolean().optional(),
+  welcomeEnabled: z.boolean().optional(),
+  welcomeTitle: z.string().trim().min(1).max(120).optional(),
+  welcomeBody: z.string().trim().min(1).max(2000).optional(),
+  promoEnabled: z.boolean().optional(),
+  promoHeadline: z.string().trim().max(160).optional(),
+  promoImageUrl: z
+    .union([z.literal(""), z.string().trim().url("Enter a valid image URL")])
+    .optional(),
+  promoLinkUrl: z
+    .union([z.literal(""), z.string().trim().url("Enter a valid link URL")])
+    .optional(),
 });

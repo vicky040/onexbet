@@ -45,6 +45,8 @@ export default async function SettingsPage() {
               ["Sign-ups", settings.signupsEnabled ? "Open" : "Closed"],
               ["New agents need approval", settings.requireAgentApproval ? "Yes" : "No"],
               ["Deposits auto-approved", settings.autoApproveDeposits ? "Yes" : "No"],
+              ["Startup dialog", settings.welcomeEnabled ? "Shown" : "Hidden"],
+              ["Promotion", settings.promoEnabled ? "Shown" : "Hidden"],
             ].map(([label, value]) => (
               <div key={label} className="flex justify-between gap-3">
                 <dt className="text-muted">{label}</dt>
@@ -169,6 +171,69 @@ export default async function SettingsPage() {
               label="New agents need approval before they can sign in"
               hint="They land in Pending and get no session until an admin activates them."
               defaultChecked={settings.requireAgentApproval}
+            />
+          </div>
+        </Card>
+
+        <Card
+          title="Startup dialog"
+          description="Shown on the sign-in screen before anyone logs in, and closable. The joining amount it quotes is the deposit minimum above, so there is only one number to keep current."
+        >
+          <div className="space-y-4">
+            <Checkbox
+              name="welcomeEnabled"
+              label="Show the welcome dialog on startup"
+              defaultChecked={settings.welcomeEnabled}
+            />
+            <Field
+              label="Title"
+              name="welcomeTitle"
+              maxLength={120}
+              defaultValue={settings.welcomeTitle}
+            />
+            <Textarea
+              label="Message"
+              name="welcomeBody"
+              rows={5}
+              maxLength={2000}
+              defaultValue={settings.welcomeBody}
+              hint="Line breaks are kept."
+            />
+          </div>
+        </Card>
+
+        <Card
+          title="Promotion"
+          description="A dismissible banner on the sign-in screen. Leave it off to show nothing."
+        >
+          <div className="space-y-4">
+            <Checkbox
+              name="promoEnabled"
+              label="Show the promotion"
+              defaultChecked={settings.promoEnabled}
+            />
+            <Field
+              label="Headline"
+              name="promoHeadline"
+              maxLength={160}
+              defaultValue={settings.promoHeadline}
+              placeholder="Bet on every match, live"
+            />
+            <Field
+              label="Image URL"
+              name="promoImageUrl"
+              type="url"
+              defaultValue={settings.promoImageUrl}
+              placeholder="https://…/banner.png"
+              hint="Optional. Without one the headline shows on its own."
+            />
+            <Field
+              label="Link URL"
+              name="promoLinkUrl"
+              type="url"
+              defaultValue={settings.promoLinkUrl}
+              placeholder="https://1xbet.com"
+              hint="Optional. Tapping the banner opens this."
             />
           </div>
         </Card>

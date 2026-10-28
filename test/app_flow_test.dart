@@ -265,4 +265,76 @@ void main() {
       expect(find.textContaining('Minimum deposit is ₹270000.00'), findsOneWidget);
     });
   });
+
+  group('startup notices', () {
+    testWidgets('the welcome dialog explains the joining requirement',
+        (tester) async {
+      await pumpApp(
+        tester,
+        content: FakeContentRepository(welcomeEnabled: true),
+      );
+
+      expect(find.text('Welcome to 1XBET Agent'), findsOneWidget);
+      expect(find.text('To become an agent'), findsOneWidget);
+      // 3000 USDT at the fake rate of 90.
+      expect(
+        find.textContaining('3000 USDT (about ₹270000.00) is mandatory'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('it closes and stays closed', (tester) async {
+      await pumpApp(
+        tester,
+        content: FakeContentRepository(welcomeEnabled: true),
+      );
+      expect(find.text('Welcome to 1XBET Agent'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('closeWelcome')));
+      await tester.pumpAndSettle();
+      expect(find.text('Welcome to 1XBET Agent'), findsNothing);
+
+      // Still signed out on the login screen, and it does not come back.
+      expect(find.text('Welcome back'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('Welcome to 1XBET Agent'), findsNothing);
+    });
+
+    testWidgets('an admin can switch the dialog off', (tester) async {
+      await pumpApp(
+        tester,
+        content: FakeContentRepository(welcomeEnabled: false),
+      );
+
+      expect(find.text('Welcome to 1XBET Agent'), findsNothing);
+      expect(find.text('Welcome back'), findsOneWidget);
+    });
+
+    testWidgets('the promotion shows on sign-in and can be dismissed',
+        (tester) async {
+      await pumpApp(
+        tester,
+        content: FakeContentRepository(
+          welcomeEnabled: false,
+          promoEnabled: true,
+        ),
+      );
+
+      expect(
+        find.text('Bet on every match, live on 1XBET'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const Key('closePromo')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Bet on every match, live on 1XBET'), findsNothing);
+      expect(find.text('Welcome back'), findsOneWidget);
+    });
+
+    testWidgets('no promotion is shown when it is off', (tester) async {
+      await pumpApp(tester);
+      expect(find.byKey(const Key('closePromo')), findsNothing);
+    });
+  });
 }

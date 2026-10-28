@@ -1,3 +1,4 @@
+import 'package:onexbet/data/models/app_content.dart';
 import 'package:onexbet/data/models/bank_account.dart';
 import 'package:onexbet/data/models/dashboard_summary.dart';
 import 'package:onexbet/data/models/deposit_config.dart';
@@ -7,6 +8,7 @@ import 'package:onexbet/data/models/txn_status.dart';
 import 'package:onexbet/data/models/user.dart';
 import 'package:onexbet/data/repositories/auth_repository.dart';
 import 'package:onexbet/data/repositories/bank_repository.dart';
+import 'package:onexbet/data/repositories/content_repository.dart';
 import 'package:onexbet/data/repositories/inbox_repository.dart';
 import 'package:onexbet/data/repositories/wallet_repository.dart';
 
@@ -355,4 +357,31 @@ class FakeInboxRepository implements InboxRepository {
     ];
     return List.unmodifiable(_messages);
   }
+}
+
+class FakeContentRepository implements ContentRepository {
+  FakeContentRepository({
+    this.welcomeEnabled = true,
+    this.promoEnabled = false,
+  });
+
+  final bool welcomeEnabled;
+  final bool promoEnabled;
+
+  @override
+  Future<AppContent> appContent() async => AppContent(
+        welcome: WelcomeNotice(
+          enabled: welcomeEnabled,
+          title: 'Welcome to 1XBET Agent',
+          body: 'Agents collect player deposits and pay out withdrawals.',
+          joiningMinimumUsdt: 3000,
+          joiningMinimumInr: 3000 * FakeWalletRepository.usdtRate,
+        ),
+        promo: PromoNotice(
+          enabled: promoEnabled,
+          headline: 'Bet on every match, live on 1XBET',
+          imageUrl: '',
+          linkUrl: 'https://example.com/promo',
+        ),
+      );
 }
