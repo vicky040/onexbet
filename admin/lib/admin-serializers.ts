@@ -188,6 +188,8 @@ export function adminSettings(settings: Settings) {
     defaultPayoutCommissionRate: toNumber(settings.defaultPayoutCommissionRate),
     minDepositUsdt: toNumber(settings.minDepositUsdt),
     agentPlanUsdt: toNumber(settings.agentPlanUsdt),
+    agentPlanSecurityUsdt: toNumber(settings.agentPlanSecurityUsdt),
+    masterPlanSecurityUsdt: toNumber(settings.masterPlanSecurityUsdt),
     masterPlanUsdt: toNumber(settings.masterPlanUsdt),
     bankTransferEnabled: settings.bankTransferEnabled,
     usdtInrRate: toNumber(settings.usdtInrRate),

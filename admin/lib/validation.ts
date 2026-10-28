@@ -305,6 +305,8 @@ export const updateSettingsSchema = z.object({
   minDepositUsdt: z.coerce.number().min(0).max(99_999_999).optional(),
   agentPlanUsdt: z.coerce.number().positive().max(99_999_999).optional(),
   masterPlanUsdt: z.coerce.number().positive().max(99_999_999).optional(),
+  agentPlanSecurityUsdt: z.coerce.number().min(0).max(99_999_999).optional(),
+  masterPlanSecurityUsdt: z.coerce.number().min(0).max(99_999_999).optional(),
   bankTransferEnabled: z.boolean().optional(),
   usdtInrRate: z.coerce
     .number()

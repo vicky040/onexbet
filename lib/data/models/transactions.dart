@@ -51,6 +51,7 @@ class PayoutPayment {
     required this.commission,
     required this.status,
     this.upiId = '',
+    this.note,
   });
 
   final String id;
@@ -60,6 +61,9 @@ class PayoutPayment {
   final TxnStatus status;
   final String upiId;
 
+  /// What it was for, when it was not an ordinary player payout.
+  final String? note;
+
   factory PayoutPayment.fromJson(Map<String, dynamic> json) => PayoutPayment(
         id: asString(json['id']),
         createdAt: asDate(json['createdAt']),
@@ -67,6 +71,7 @@ class PayoutPayment {
         commission: asDouble(json['commission']),
         status: TxnStatus.fromCode(json['status']),
         upiId: asString(json['upiId']),
+        note: json['note'] as String?,
       );
 }
 

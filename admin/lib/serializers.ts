@@ -132,6 +132,8 @@ export function serializePayoutPayment(payout: Payout) {
     amount: toNumber(payout.amount),
     commission: toNumber(payout.commission),
     upiId: payout.upiId,
+    /// What it was for, when it was not an ordinary player payout.
+    note: payout.note,
     acceptedAt: iso(payout.acceptedAt),
     paidAt: iso(payout.paidAt),
     payoutStatus: payout.status,

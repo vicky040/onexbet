@@ -38,6 +38,10 @@ export default async function SettingsPage() {
               ["Default payout commission", formatPercent(settings.defaultPayoutCommissionRate.toString())],
               ["Agent plan", `${settings.agentPlanUsdt.toString()} USDT`],
               ["Master plan", `${settings.masterPlanUsdt.toString()} USDT`],
+              [
+                "Held as security",
+                `${settings.agentPlanSecurityUsdt.toString()} / ${settings.masterPlanSecurityUsdt.toString()} USDT`,
+              ],
               ["Bank transfer", settings.bankTransferEnabled ? "Enabled" : "Disabled"],
               ["Minimum top-up", `${settings.minDepositUsdt.toString()} USDT`],
               ["USDT rate", formatInr(settings.usdtInrRate.toString())],
@@ -168,6 +172,26 @@ export default async function SettingsPage() {
                 hint={`About ${formatInr(
                   Number(settings.masterPlanUsdt) * Number(settings.usdtInrRate),
                 )}`}
+              />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field
+                label="Agent plan security (USDT)"
+                name="agentPlanSecurityUsdt"
+                type="number"
+                step="0.01"
+                min="0"
+                defaultValue={settings.agentPlanSecurityUsdt.toString()}
+                hint="Held back; the rest becomes float"
+              />
+              <Field
+                label="Master plan security (USDT)"
+                name="masterPlanSecurityUsdt"
+                type="number"
+                step="0.01"
+                min="0"
+                defaultValue={settings.masterPlanSecurityUsdt.toString()}
+                hint="Held back; the rest becomes float"
               />
             </div>
             <Checkbox

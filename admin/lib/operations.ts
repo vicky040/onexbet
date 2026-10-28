@@ -8,7 +8,14 @@ import {
   referralCode,
   withUniqueReference,
 } from "./ids";
-import { commissionOf, D, money, toNumber, type Numeric } from "./money";
+import {
+  commissionOf,
+  D,
+  money,
+  toNumber,
+  type Money,
+  type Numeric,
+} from "./money";
 import type { Deposit, Payin, Payout } from "./types";
 import { writeAudit } from "./audit";
 
@@ -34,7 +41,10 @@ import { writeAudit } from "./audit";
 
 type Tx = Prisma.TransactionClient;
 
-type BalanceChange = { previousBalance: Prisma.Decimal; newBalance: Prisma.Decimal };
+type BalanceChange = {
+  previousBalance: Prisma.Decimal;
+  newBalance: Prisma.Decimal;
+};
 
 /**
  * Adds `delta` (which may be negative) to the agent's balance atomically and
@@ -192,26 +202,14 @@ export async function approveDeposit(input: {
       );
     }
 
-    const change = await applyBalanceDelta(tx, existing.agentId, existing.amount);
+    const joining = existing.plan === "AGENT" || existing.plan === "MASTER";
 
-    // A joining deposit is what puts an agent on a plan. A master also gets
-    // the referral code they hand out, unless they already have one.
-    if (existing.plan === "AGENT" || existing.plan === "MASTER") {
-      const agent = await tx.agent.findUniqueOrThrow({
-        where: { id: existing.agentId },
-        select: { referralCode: true },
-      });
-
-      await tx.agent.update({
-        where: { id: existing.agentId },
-        data: {
-          plan: existing.plan,
-          ...(existing.plan === "MASTER" && !agent.referralCode
-            ? { referralCode: referralCode() }
-            : {}),
-        },
-      });
-    }
+    // An ordinary top-up is simply credited. A joining plan is the agent's
+    // first payout — they put money in, so they earn payout commission on
+    // it — and part of it is held back as security rather than float.
+    const change = joining
+      ? await settleJoiningPlan(tx, existing, input.adminId)
+      : await applyBalanceDelta(tx, existing.agentId, existing.amount);
 
     const updated = await tx.deposit.update({
       where: { id: existing.id },
@@ -225,12 +223,14 @@ export async function approveDeposit(input: {
       },
     });
 
-    await notifyAgent(tx, {
-      agentId: existing.agentId,
-      title: "Deposit approved",
-      body: `Your deposit ${existing.reference} of ${inr(existing.amount)} has been completed.`,
-      createdById: input.adminId,
-    });
+    if (!joining) {
+      await notifyAgent(tx, {
+        agentId: existing.agentId,
+        title: "Deposit approved",
+        body: `Your deposit ${existing.reference} of ${inr(existing.amount)} has been completed.`,
+        createdById: input.adminId,
+      });
+    }
 
     return updated;
   });
@@ -241,13 +241,108 @@ export async function approveDeposit(input: {
     entity: "Deposit",
     entityId: deposit.id,
     summary: `Approved deposit ${deposit.reference} of ${inr(deposit.amount)}`,
-    meta: { amount: toNumber(deposit.amount), agentId: deposit.agentId },
+    meta: {
+      amount: toNumber(deposit.amount),
+      agentId: deposit.agentId,
+      plan: deposit.plan,
+    },
   });
 
   return deposit;
 }
 
-/** Admin rejects a pending deposit. No balance change. */
+/**
+ * Puts an agent on their plan and settles it as their opening payout.
+ *
+ * The agent paid the plan price in, so by the same rule as any payout they
+ * earn their payout commission on it. Part of the price is then held back
+ * as a security deposit, and what is left is their float:
+ *
+ *     balance += price + commission - security
+ *
+ * A master also gets the referral code they hand out.
+ */
+async function settleJoiningPlan(
+  tx: Tx,
+  deposit: Deposit,
+  adminId: string,
+): Promise<{ previousBalance: Money; newBalance: Money }> {
+  const agent = await tx.agent.findUniqueOrThrow({
+    where: { id: deposit.agentId },
+    select: { referralCode: true, payoutCommissionRate: true },
+  });
+  const settings = await tx.settings.findUniqueOrThrow({
+    where: { id: "default" },
+  });
+
+  const isMaster = deposit.plan === "MASTER";
+  const rate = D(agent.payoutCommissionRate);
+  const commission = commissionOf(deposit.amount, rate);
+
+  // The security is set in USDT, so it is worth what the deposit itself was
+  // valued at — using the rate stored on the deposit, not today's, or the
+  // split would drift if the rate moved before an admin got to it.
+  const securityUsdt = D(
+    isMaster ? settings.masterPlanSecurityUsdt : settings.agentPlanSecurityUsdt,
+  );
+  const usdtRate = D(deposit.usdtRate ?? settings.usdtInrRate);
+  const securityInr = money(securityUsdt.mul(usdtRate));
+
+  const change = await applyBalanceDelta(
+    tx,
+    deposit.agentId,
+    D(deposit.amount).add(commission).sub(securityInr),
+  );
+
+  await tx.agent.update({
+    where: { id: deposit.agentId },
+    data: {
+      plan: deposit.plan === "MASTER" ? "MASTER" : "AGENT",
+      securityDepositUsdt: { increment: securityUsdt },
+      ...(isMaster && !agent.referralCode
+        ? { referralCode: referralCode() }
+        : {}),
+    },
+  });
+
+  // Recorded as a settled payout so it shows in My Payments and counts
+  // towards earnings, which is where the agent looks for this commission.
+  const payout = await withUniqueReference(
+    (reference) =>
+      tx.payout.create({
+        data: {
+          reference,
+          agentId: deposit.agentId,
+          amount: deposit.amount,
+          commissionRate: rate,
+          commission,
+          // Not paid out to anyone: the agent paid us.
+          upiId: "-",
+          note: `Joining plan (${isMaster ? "Master" : "Agent"})`,
+          status: "COMPLETED",
+          createdById: adminId,
+          acceptedAt: new Date(),
+          paidAt: new Date(),
+          settledAt: new Date(),
+        },
+      }),
+    payoutReference,
+  );
+
+  await notifyAgent(tx, {
+    agentId: deposit.agentId,
+    title: `${isMaster ? "Master" : "Agent"} plan activated`,
+    body:
+      `Your ${isMaster ? "Master" : "Agent"} plan is active. ` +
+      `${inr(commission)} commission credited on ${payout.reference}, and ` +
+      `${securityUsdt.toFixed(0)} USDT is held as your security deposit. ` +
+      `Your balance is now ${inr(change.newBalance)}.`,
+    createdById: adminId,
+  });
+
+  return change;
+}
+
 export async function rejectDeposit(input: {
   depositId: string;
   adminId: string;
@@ -333,7 +428,11 @@ export async function recordPayin(input: {
     const commission = commissionOf(amount, rate);
 
     // Net effect on the float: commission earned, amount spent.
-    const change = await applyBalanceDelta(tx, input.agentId, commission.sub(amount));
+    const change = await applyBalanceDelta(
+      tx,
+      input.agentId,
+      commission.sub(amount),
+    );
 
     const created = await withUniqueReference(
       (reference) =>
@@ -407,9 +506,12 @@ export async function createPayout(input: {
         select: { payoutCommissionRate: true },
       });
       if (!agent) throw ApiError.notFound("Agent");
-      if (input.commissionRate === undefined) rate = D(agent.payoutCommissionRate);
+      if (input.commissionRate === undefined)
+        rate = D(agent.payoutCommissionRate);
     } else if (input.commissionRate === undefined) {
-      const settings = await tx.settings.findUnique({ where: { id: "default" } });
+      const settings = await tx.settings.findUnique({
+        where: { id: "default" },
+      });
       rate = D(settings?.defaultPayoutCommissionRate ?? 2);
     }
 
@@ -520,15 +622,22 @@ export async function settlePayout(input: {
   adminId: string;
 }): Promise<Payout> {
   const payout = await prisma.$transaction(async (tx) => {
-    const existing = await tx.payout.findUnique({ where: { id: input.payoutId } });
+    const existing = await tx.payout.findUnique({
+      where: { id: input.payoutId },
+    });
     if (!existing) throw ApiError.notFound("Payout");
     if (!existing.agentId) {
-      throw ApiError.conflict("Assign the payout to an agent before settling it");
+      throw ApiError.conflict(
+        "Assign the payout to an agent before settling it",
+      );
     }
     if (existing.status === "COMPLETED") {
       throw ApiError.conflict("This payout has already been settled");
     }
-    if (existing.status !== "PAYMENT_RECEIVED" && existing.status !== "ACCEPTED") {
+    if (
+      existing.status !== "PAYMENT_RECEIVED" &&
+      existing.status !== "ACCEPTED"
+    ) {
       throw ApiError.conflict("Only an accepted or paid payout can be settled");
     }
 
@@ -579,7 +688,9 @@ export async function failPayout(input: {
   note?: string;
 }): Promise<Payout> {
   const payout = await prisma.$transaction(async (tx) => {
-    const existing = await tx.payout.findUnique({ where: { id: input.payoutId } });
+    const existing = await tx.payout.findUnique({
+      where: { id: input.payoutId },
+    });
     if (!existing) throw ApiError.notFound("Payout");
     if (existing.status === "COMPLETED") {
       throw ApiError.conflict(
@@ -759,7 +870,9 @@ export async function updatePayin(input: {
   adminId: string;
 }): Promise<Payin> {
   const payin = await prisma.$transaction(async (tx) => {
-    const existing = await tx.payin.findUnique({ where: { id: input.payinId } });
+    const existing = await tx.payin.findUnique({
+      where: { id: input.payinId },
+    });
     if (!existing) throw ApiError.notFound("Payin");
 
     const amount = money(input.amount ?? existing.amount);
@@ -838,7 +951,9 @@ export async function updatePayoutAmounts(input: {
   adminId: string;
 }): Promise<Payout> {
   const payout = await prisma.$transaction(async (tx) => {
-    const existing = await tx.payout.findUnique({ where: { id: input.payoutId } });
+    const existing = await tx.payout.findUnique({
+      where: { id: input.payoutId },
+    });
     if (!existing) throw ApiError.notFound("Payout");
 
     const amount = money(input.amount ?? existing.amount);

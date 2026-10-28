@@ -436,6 +436,17 @@ class _PlanCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(plan.description, style: AppTextStyles.muted),
+                  if (plan.securityUsdt > 0) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      '${plan.securityUsdt.toStringAsFixed(0)} USDT held as '
+                      'security, ${plan.floatUsdt.toStringAsFixed(0)} USDT to '
+                      'your balance, plus your payout commission.',
+                      style: AppTextStyles.muted.copyWith(
+                        color: AppColors.primaryBlue,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

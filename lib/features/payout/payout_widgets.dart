@@ -27,6 +27,18 @@ class PayoutPaymentCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(formatDateTime(payment.createdAt), style: AppTextStyles.muted),
+          // Says what it was for when it was not an ordinary player payout,
+          // such as the joining plan that opened the account.
+          if (payment.note != null && payment.note!.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              payment.note!,
+              style: AppTextStyles.muted.copyWith(
+                color: AppColors.primaryBlue,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
           const SizedBox(height: 10),
           KvRow('Amount', formatInr(payment.amount)),
           KvRow(

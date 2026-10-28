@@ -66,6 +66,9 @@ export const GET = withRoute(async (request: Request) => {
           "Take payins and payouts, and earn commission on every transaction.",
         priceUsdt: toNumber(settings.agentPlanUsdt),
         priceInr: inr(settings.agentPlanUsdt),
+        // Held back rather than credited as float, so the app can say so
+        // before anyone pays.
+        securityUsdt: toNumber(settings.agentPlanSecurityUsdt),
       },
       {
         code: "MASTER",
@@ -75,6 +78,7 @@ export const GET = withRoute(async (request: Request) => {
           "panel to manage the agents you bring in.",
         priceUsdt: toNumber(settings.masterPlanUsdt),
         priceInr: inr(settings.masterPlanUsdt),
+        securityUsdt: toNumber(settings.masterPlanSecurityUsdt),
       },
     ],
   });

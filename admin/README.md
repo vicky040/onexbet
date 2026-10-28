@@ -161,20 +161,37 @@ will scan the old address — the settings screen says so next to the field.
 | Event | Agent balance |
 | --- | --- |
 | Deposit approved | `+ amount` |
-| Payin recorded | `+ commission - amount` |
+| Joining plan approved | `+ price + commission − security` |
+| Payin recorded | `+ commission − amount` |
 | Payout settled | `+ amount + commission` |
 
-A payin spends the agent's float: a player paid money into the agent's bank
-account, the platform credited that player, and the agent keeps a
-commission. A payout is the mirror — the agent pays a player out of their
-own bank, so the platform owes them the amount back plus commission, which
-lands when an admin confirms it.
+**Payout** is a player putting money in, which the agent collects: the
+balance goes up by the amount and the agent earns commission on it.
+**Payin** is the app paying a player out through the agent: the balance goes
+down by the amount, and the agent still earns commission. Commission is
+always paid on top, never deducted from the amount.
 
-Money is `Decimal(14,2)` everywhere, arithmetic goes through
-`Prisma.Decimal`, and every change is a single atomic
-`UPDATE "Agent" SET balance = balance + $1 … RETURNING balance` — so
-concurrent operations cannot lose one another's write, and anything that
-would take a balance below zero is refused.
+A joining plan follows the payout rule, because the agent is the one paying
+it in. They earn their **payout** commission on the price, part of the price
+is held back as a security deposit, and the rest is float:
+
+    3000 USDT Agent plan, payout rate 2%, 1 USDT = Rs 90
+
+      plan paid        3000 USDT    Rs 2,70,000
+      commission 2%      60 USDT    Rs    5,400
+      security        -1000 USDT    Rs -90,000
+      ----------------------------------------
+      balance          2060 USDT    Rs 1,85,400
+      security held    1000 USDT
+
+It is written as a settled payout, so it appears in **My Payments** labelled
+"Joining plan" and counts towards the earnings screen — which is where an
+agent looks to understand where their opening balance came from.
+
+The security split is set in Settings (`agentPlanSecurityUsdt` 1000,
+`masterPlanSecurityUsdt` 2000) and is converted at the rate **stored on the
+deposit**, not today's, so the split cannot drift if the rate moves before
+an admin reviews it.
 
 ## Who can do what
 

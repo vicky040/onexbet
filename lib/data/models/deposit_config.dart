@@ -53,6 +53,7 @@ class JoiningPlan {
     required this.description,
     required this.priceUsdt,
     required this.priceInr,
+    this.securityUsdt = 0,
   });
 
   /// `AGENT` or `MASTER`.
@@ -62,6 +63,12 @@ class JoiningPlan {
   final double priceUsdt;
   final double priceInr;
 
+  /// Held back as a security deposit rather than credited as float.
+  final double securityUsdt;
+
+  /// What actually lands in the balance, before commission.
+  double get floatUsdt => priceUsdt - securityUsdt;
+
   bool get isMaster => code == 'MASTER';
 
   factory JoiningPlan.fromJson(Map<String, dynamic> json) => JoiningPlan(
@@ -70,6 +77,7 @@ class JoiningPlan {
         description: asString(json['description']),
         priceUsdt: asDouble(json['priceUsdt']),
         priceInr: asDouble(json['priceInr']),
+        securityUsdt: asDouble(json['securityUsdt']),
       );
 }
 

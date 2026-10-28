@@ -207,6 +207,7 @@ class FakeWalletRepository implements WalletRepository {
                   description: 'Start taking payins and payouts.',
                   priceUsdt: 3000,
                   priceInr: 3000 * usdtRate,
+                  securityUsdt: 1000,
                 ),
                 JoiningPlan(
                   code: 'MASTER',
@@ -214,6 +215,7 @@ class FakeWalletRepository implements WalletRepository {
                   description: 'Everything an agent has, plus your own panel.',
                   priceUsdt: 5000,
                   priceInr: 5000 * usdtRate,
+                  securityUsdt: 2000,
                 ),
               ],
         currencies: [

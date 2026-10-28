@@ -278,6 +278,16 @@ void main() {
       expect(find.text('5000 USDT'), findsOneWidget);
       expect(find.text('PANEL ACCESS'), findsOneWidget);
 
+      // The agent is told what is held back before they pay anything.
+      expect(
+        find.textContaining('1000 USDT held as security'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('2000 USDT held as security'),
+        findsOneWidget,
+      );
+
       // The QR only makes sense once an amount is settled.
       expect(find.text('Choose a plan to see the payment details.'),
           findsOneWidget);

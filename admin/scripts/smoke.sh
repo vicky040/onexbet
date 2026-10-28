@@ -341,6 +341,33 @@ JOINID=$(curl -s -b "$JAR" "$BASE/api/admin/deposits?q=PLANC$RUN" | j data.0.id)
 curl -s -b "$JAR" -X POST $BASE/api/admin/deposits/$JOINID/approve > /dev/null
 check "approving the joining deposit activates the plan" "MASTER" \
   "$(curl -s $BASE/api/v1/auth/me -H "$NEWAUTH" | j data.user.plan)"
+# The plan is the agent's opening payout: they paid it in, so they earn
+# payout commission on it, and part of it is held back as security.
+#   balance = price + commission - security
+PLANRATE=$(curl -s -b "$JAR" $BASE/api/admin/settings | j data.usdtInrRate)
+AGENTRATE=$(curl -s $BASE/api/v1/auth/me -H "$NEWAUTH" | j data.user.payoutCommissionRate)
+NEWSUM=$(curl -s $BASE/api/v1/wallet/summary -H "$NEWAUTH")
+NEWBAL=$(echo "$NEWSUM" | j data.totalBalance)
+NEWSEC=$(echo "$NEWSUM" | j data.securityDepositUsdt)
+
+check "2000 USDT of the master plan is held as security" "2000" "$NEWSEC"
+check "the balance is price plus commission less security" "yes" \
+  "$(node -e "
+     const price = 5000 * $PLANRATE;
+     const commission = Math.round(price * ($AGENTRATE / 100) * 100) / 100;
+     const security = 2000 * $PLANRATE;
+     const expected = price + commission - security;
+     console.log(Math.abs(expected - $NEWBAL) < 0.01 ? 'yes' : 'no');
+   ")"
+check "the plan shows as a settled payout" "Joining plan (Master)" \
+  "$(curl -s $BASE/api/v1/payouts/payments -H "$NEWAUTH" | j data.0.note)"
+check "its commission counts towards earnings" "yes" \
+  "$(node -e "
+     const commission = 5000 * $PLANRATE * ($AGENTRATE / 100);
+     const earned = $(echo "$NEWSUM" | j data.payoutCommission);
+     console.log(Math.abs(earned - commission) < 0.01 ? 'yes' : 'no');
+   ")"
+
 check "a new master is given a referral code" "yes" \
   "$(curl -s $BASE/api/v1/auth/me -H "$NEWAUTH" | j data.user.referralCode | grep -qE '^[A-Z0-9]{8}$' && echo yes || echo no)"
 check "afterwards a free-amount top-up is allowed" "USDT" \

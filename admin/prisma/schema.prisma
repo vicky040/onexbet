@@ -318,6 +318,9 @@ model Settings {
   /// What the two joining plans cost, in USDT.
   agentPlanUsdt               Decimal  @default(3000) @db.Decimal(14, 2)
   masterPlanUsdt              Decimal  @default(5000) @db.Decimal(14, 2)
+  /// How much of each plan is held back as security rather than float.
+  agentPlanSecurityUsdt       Decimal  @default(1000) @db.Decimal(14, 2)
+  masterPlanSecurityUsdt      Decimal  @default(2000) @db.Decimal(14, 2)
   /// Off until bank transfers are ready; USDT only in the meantime.
   bankTransferEnabled         Boolean  @default(false)
   /// What one USDT is worth in rupees. Set by a super admin.

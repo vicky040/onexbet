@@ -550,6 +550,8 @@ export async function updateSettingsAction(
       defaultPayoutCommissionRate: str(form, "defaultPayoutCommissionRate"),
       minDepositUsdt: str(form, "minDepositUsdt"),
       agentPlanUsdt: str(form, "agentPlanUsdt"),
+      agentPlanSecurityUsdt: str(form, "agentPlanSecurityUsdt"),
+      masterPlanSecurityUsdt: str(form, "masterPlanSecurityUsdt"),
       masterPlanUsdt: str(form, "masterPlanUsdt"),
       bankTransferEnabled: bool(form, "bankTransferEnabled"),
       usdtInrRate: str(form, "usdtInrRate"),
