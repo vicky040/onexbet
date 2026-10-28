@@ -24,8 +24,8 @@ import {
   StatTile,
   StatusBadge,
 } from "@/components/ui";
-import { isSuperAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { adminScope, assertAgentInScope } from "@/lib/scope";
 import { formatInr, formatPercent } from "@/lib/money";
 import { agentEarnings, agentSummary } from "@/lib/stats";
 
@@ -46,7 +46,10 @@ export default async function AgentDetailPage({ params }: Params) {
   const agent = await prisma.agent.findUnique({ where: { id } });
   if (!agent) notFound();
 
-  const superAdmin = await isSuperAdmin();
+  const scope = await adminScope();
+  const superAdmin = scope.admin.role === "SUPER_ADMIN";
+  // A master may only look at agents they referred.
+  assertAgentInScope(scope, id);
 
   const [summary, earnings, banks, payins, payouts, deposits] = await Promise.all([
     agentSummary(agent),
@@ -313,6 +316,36 @@ export default async function AgentDetailPage({ params }: Params) {
                 rows={2}
               />
               <SubmitButton>Save changes</SubmitButton>
+            </ActionForm>
+          </Card>
+        ) : scope.isMaster ? (
+          <Card
+            title="Commission rates"
+            description="The rates this agent earns. Everything else about them is set by a super admin."
+          >
+            <ActionForm action={updateAgentAction} className="space-y-4">
+              <input type="hidden" name="agentId" value={agent.id} />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field
+                  label="Payin commission %"
+                  name="payinCommissionRate"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  defaultValue={agent.payinCommissionRate.toString()}
+                />
+                <Field
+                  label="Payout commission %"
+                  name="payoutCommissionRate"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  defaultValue={agent.payoutCommissionRate.toString()}
+                />
+              </div>
+              <SubmitButton>Save commission</SubmitButton>
             </ActionForm>
           </Card>
         ) : (

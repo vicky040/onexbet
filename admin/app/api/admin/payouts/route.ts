@@ -1,5 +1,5 @@
 import type { Prisma } from "@prisma/client";
-import { requireAdmin } from "@/lib/auth";
+import { requireFullAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { ok, pageMeta, readBody, readPagination, withRoute } from "@/lib/http";
 import { createPayout } from "@/lib/operations";
@@ -20,7 +20,7 @@ const PAYOUT_STATUSES = [
 
 /** `?status=`, `?agentId=`, `?q=` (reference or UPI). */
 export const GET = withRoute(async (request: Request) => {
-  await requireAdmin();
+  await requireFullAdmin();
   const url = new URL(request.url);
   const page = readPagination(url);
 
@@ -74,7 +74,7 @@ export const GET = withRoute(async (request: Request) => {
 
 /** Creates a payout — assigned to one agent, or open to all when agentId is omitted. */
 export const POST = withRoute(async (request: Request) => {
-  const admin = await requireAdmin();
+  const admin = await requireFullAdmin();
   const body = await readBody(request, createPayoutSchema);
 
   const payout = await createPayout({

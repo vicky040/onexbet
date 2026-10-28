@@ -23,7 +23,10 @@ const DEMO_AGENTS = {
   primary: { mobile: "9876543210", name: "Sam Tester", email: "sam@example.com" },
   pending: { mobile: "9811122233", name: "Riya Shah", email: "riya@example.com" },
   blocked: { mobile: "9700055511", name: "Arun Verma", email: "arun@example.com" },
+  referred: { mobile: "9733344455", name: "Neha Iyer", email: "neha@example.com" },
 };
+
+const DEMO_MASTER_EMAIL = "master@onexbet.app";
 
 async function seedSettings() {
   return prisma.settings.upsert({
@@ -70,6 +73,35 @@ async function seedDemoData(adminId: string) {
       payoutCommissionRate: 2,
       securityDepositUsdt: settings.requiredSecurityDepositUsdt,
       notes: "Demo account created by the seed script.",
+      // On the Master plan, so the master panel has something to show.
+      plan: "MASTER",
+      referralCode: "MASTER01",
+    },
+  });
+
+  // An agent under that master, which is what a master panel lists.
+  await prisma.agent.create({
+    data: {
+      ...DEMO_AGENTS.referred,
+      passwordHash,
+      status: "ACTIVE",
+      plan: "AGENT",
+      referredById: agent.id,
+      payinCommissionRate: 4.5,
+      payoutCommissionRate: 1.5,
+      notes: "Referred by Sam Tester.",
+    },
+  });
+
+  // A panel account for the master, so the scoped view can be tried out.
+  await prisma.admin.deleteMany({ where: { email: DEMO_MASTER_EMAIL } });
+  await prisma.admin.create({
+    data: {
+      name: "Sam Tester (master)",
+      email: DEMO_MASTER_EMAIL,
+      passwordHash: await hashPassword("secret1"),
+      role: "MASTER_ADMIN",
+      agentId: agent.id,
     },
   });
 
@@ -280,6 +312,9 @@ async function main() {
     const { agent } = await seedDemoData(admin.id);
     console.log(
       `✔ demo agent ${agent.mobile} (password secret1) — balance ${formatInr(agent.balance)}`,
+    );
+    console.log(
+      `✔ demo master panel ${DEMO_MASTER_EMAIL} / secret1 — sees 1 referred agent`,
     );
     const counts = await Promise.all([
       prisma.agent.count(),

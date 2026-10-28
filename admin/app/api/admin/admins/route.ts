@@ -15,6 +15,7 @@ export const GET = withRoute(async () => {
 
   const admins = await prisma.admin.findMany({
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    include: { agent: { select: { id: true, name: true, mobile: true } } },
   });
 
   return ok(admins.map(adminUser));
@@ -34,12 +35,31 @@ export const POST = withRoute(async (request: Request) => {
     throw ApiError.conflict("An admin with this email already exists");
   }
 
+  // A master account only makes sense attached to an agent on the Master
+  // plan — that link is how we know whose referrals they manage.
+  if (body.role === "MASTER_ADMIN") {
+    const agent = await prisma.agent.findUnique({
+      where: { id: body.agentId },
+      select: { id: true, plan: true, panelAccount: { select: { id: true } } },
+    });
+    if (!agent) throw ApiError.notFound("Agent");
+    if (agent.plan !== "MASTER") {
+      throw ApiError.badRequest(
+        "That agent is not on the Master plan. Approve their Master deposit first.",
+      );
+    }
+    if (agent.panelAccount) {
+      throw ApiError.conflict("That agent already has a panel account");
+    }
+  }
+
   const created = await prisma.admin.create({
     data: {
       name: body.name,
       email,
       passwordHash: await hashPassword(body.password),
       role: body.role ?? "OPERATOR",
+      agentId: body.role === "MASTER_ADMIN" ? body.agentId : null,
     },
   });
 

@@ -57,3 +57,11 @@ export async function withUniqueReference<T>(
   }
   throw lastError;
 }
+
+/**
+ * A master's referral code: short enough to read out over the phone, and
+ * unique-checked by the database either way.
+ */
+export function referralCode(): string {
+  return randomCode(8);
+}

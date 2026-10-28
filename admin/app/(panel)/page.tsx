@@ -19,6 +19,7 @@ import {
   StatTile,
 } from "@/components/ui";
 import { prisma } from "@/lib/db";
+import { adminScope, scopedByAgentId } from "@/lib/scope";
 import { formatInr, formatPercent } from "@/lib/money";
 import { platformOverview } from "@/lib/stats";
 
@@ -33,22 +34,26 @@ type Payout = Prisma.PayoutGetPayload<{ include: { agent: typeof agentSelect } }
 type Payin = Prisma.PayinGetPayload<{ include: { agent: typeof agentSelect } }>;
 
 export default async function DashboardPage() {
+  const scope = await adminScope();
+  const forAgents = scopedByAgentId(scope);
+
   const [overview, pendingDeposits, reportedPayouts, recentPayins] =
     await Promise.all([
-      platformOverview(),
+      platformOverview(scope.agentIds),
       prisma.deposit.findMany({
-        where: { status: "PENDING" },
+        where: { status: "PENDING", ...forAgents },
         include: { agent: agentSelect },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         take: 6,
       }),
       prisma.payout.findMany({
-        where: { status: "PAYMENT_RECEIVED" },
+        where: { status: "PAYMENT_RECEIVED", ...forAgents },
         include: { agent: agentSelect },
         orderBy: [{ paidAt: "asc" }, { id: "asc" }],
         take: 6,
       }),
       prisma.payin.findMany({
+        where: forAgents,
         include: { agent: agentSelect },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: 6,
@@ -197,7 +202,11 @@ export default async function DashboardPage() {
       <AutoRefresh seconds={20} />
       <PageHeader
         title="Dashboard"
-        subtitle="Money waiting on you, and how the network is doing today."
+        subtitle={
+          scope.isMaster
+            ? "How the agents you referred are doing."
+            : "Money waiting on you, and how the network is doing today."
+        }
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -252,6 +261,7 @@ export default async function DashboardPage() {
       </div>
 
       <div className="mt-6 space-y-6">
+        {scope.isMaster ? null : (
         <Card
           title="Deposits waiting for review"
           description="Approving credits the agent's balance straight away."
@@ -271,7 +281,9 @@ export default async function DashboardPage() {
             empty="Nothing to review. The queue is clear."
           />
         </Card>
+        )}
 
+        {scope.isMaster ? null : (
         <Card
           title="Payouts awaiting confirmation"
           description="The agent says they have paid the player. Settling credits them the amount plus commission."
@@ -291,6 +303,7 @@ export default async function DashboardPage() {
             empty="No payouts are waiting on a confirmation."
           />
         </Card>
+        )}
 
         <Card
           title="Latest payins"

@@ -1,5 +1,5 @@
 import type { Prisma } from "@prisma/client";
-import { requireAdmin, requireSuperAdmin } from "@/lib/auth";
+import { adminScope, scopedAgentWhere } from "@/lib/scope";
 import { writeAudit } from "@/lib/audit";
 import { getSettings, prisma } from "@/lib/db";
 import { ApiError } from "@/lib/errors";
@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 /** `?q=` searches name/mobile/email, `?status=` filters. */
 export const GET = withRoute(async (request: Request) => {
-  await requireAdmin();
+  const scope = await adminScope();
   const url = new URL(request.url);
   const page = readPagination(url);
 
@@ -20,6 +20,8 @@ export const GET = withRoute(async (request: Request) => {
   const status = url.searchParams.get("status")?.toUpperCase();
 
   const where: Prisma.AgentWhereInput = {
+    // A master sees only the agents they referred.
+    ...scopedAgentWhere(scope),
     ...(status && ["PENDING", "ACTIVE", "BLOCKED"].includes(status)
       ? { status: status as Prisma.AgentWhereInput["status"] }
       : {}),
@@ -52,9 +54,19 @@ export const GET = withRoute(async (request: Request) => {
   return ok(agents.map(adminAgent), { meta: pageMeta(page, total) });
 });
 
-/** Creates an agent directly, bypassing sign-up. */
+/**
+ * Creates an agent directly, bypassing sign-up.
+ *
+ * A master may do this too: anyone they create is referred by them, which is
+ * the second way agents end up under a master (the first being their
+ * referral code at sign-up).
+ */
 export const POST = withRoute(async (request: Request) => {
-  const admin = await requireSuperAdmin();
+  const scope = await adminScope();
+  if (!scope.isMaster && scope.admin.role !== "SUPER_ADMIN") {
+    throw ApiError.forbidden("Only a super admin can create agents");
+  }
+
   const body = await readBody(request, createAgentSchema);
   const settings = await getSettings();
 
@@ -77,8 +89,10 @@ export const POST = withRoute(async (request: Request) => {
         body.payinCommissionRate ?? settings.defaultPayinCommissionRate,
       payoutCommissionRate:
         body.payoutCommissionRate ?? settings.defaultPayoutCommissionRate,
-      securityDepositUsdt: body.securityDepositUsdt ?? 0,
-      notes: body.notes,
+      securityDepositUsdt: scope.isMaster ? 0 : (body.securityDepositUsdt ?? 0),
+      notes: scope.isMaster ? null : body.notes,
+      // A master's agents belong to that master.
+      referredById: scope.isMaster ? scope.admin.agentId : null,
     },
   });
 
@@ -91,11 +105,12 @@ export const POST = withRoute(async (request: Request) => {
   });
 
   await writeAudit({
-    adminId: admin.id,
+    adminId: scope.admin.id,
     action: "agent.create",
     entity: "Agent",
     entityId: agent.id,
     summary: `Created agent ${agent.name} (+91 ${agent.mobile})`,
+    meta: { byMaster: scope.isMaster },
   });
 
   return ok(adminAgent(agent), { status: 201 });

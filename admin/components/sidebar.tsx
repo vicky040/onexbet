@@ -35,11 +35,13 @@ type NavItem = {
   badge?: keyof NavBadges;
   /** Hidden from operators. */
   superAdminOnly?: boolean;
+  /** A master sees only the screens marked here. */
+  masters?: boolean;
 };
 
 const NAV: NavItem[] = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/agents", label: "Agents", icon: Users, badge: "agents" },
+  { href: "/", label: "Dashboard", icon: LayoutDashboard, masters: true },
+  { href: "/agents", label: "Agents", icon: Users, badge: "agents", masters: true },
   { href: "/deposits", label: "Deposits", icon: ArrowDownToLine, badge: "deposits" },
   { href: "/payouts", label: "Payouts", icon: Banknote, badge: "payouts" },
   { href: "/payins", label: "Payins", icon: Wallet },
@@ -51,21 +53,24 @@ const NAV: NavItem[] = [
   { href: "/audit", label: "Audit log", icon: ScrollText },
 ];
 
-function useVisibleNav(isSuperAdmin: boolean) {
-  return NAV.filter((item) => !item.superAdminOnly || isSuperAdmin);
+function useVisibleNav(role: string) {
+  if (role === "MASTER_ADMIN") return NAV.filter((item) => item.masters);
+  return NAV.filter(
+    (item) => !item.superAdminOnly || role === "SUPER_ADMIN",
+  );
 }
 
 function NavLinks({
   badges,
-  isSuperAdmin,
+  role,
   onNavigate,
 }: {
   badges: NavBadges;
-  isSuperAdmin: boolean;
+  role: string;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
-  const items = useVisibleNav(isSuperAdmin);
+  const items = useVisibleNav(role);
 
   return (
     <nav className="space-y-1">
@@ -117,11 +122,11 @@ function Brand() {
 /** The permanent sidebar, from `lg` up. */
 export function Sidebar({
   badges,
-  isSuperAdmin,
+  role,
   footer,
 }: {
   badges: NavBadges;
-  isSuperAdmin: boolean;
+  role: string;
   footer: ReactNode;
 }) {
   return (
@@ -129,7 +134,7 @@ export function Sidebar({
       <div className="mb-6 px-2">
         <Brand />
       </div>
-      <NavLinks badges={badges} isSuperAdmin={isSuperAdmin} />
+      <NavLinks badges={badges} role={role} />
       <div className="mt-auto border-t border-white/10 pt-4">{footer}</div>
     </aside>
   );
@@ -141,11 +146,11 @@ export function Sidebar({
  */
 export function MobileNav({
   badges,
-  isSuperAdmin,
+  role,
   footer,
 }: {
   badges: NavBadges;
-  isSuperAdmin: boolean;
+  role: string;
   footer: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -209,7 +214,7 @@ export function MobileNav({
             </div>
             <NavLinks
               badges={badges}
-              isSuperAdmin={isSuperAdmin}
+              role={role}
               onNavigate={() => setOpen(false)}
             />
             <div className="mt-6 border-t border-white/10 pt-4">{footer}</div>

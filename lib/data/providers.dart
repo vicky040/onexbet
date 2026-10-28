@@ -155,11 +155,20 @@ class DepositsController extends AsyncNotifier<List<DepositRecord>> {
     required double amount,
     required String utr,
     String currency = 'INR',
+    String? plan,
   }) async {
-    final record = await ref
-        .read(walletRepositoryProvider)
-        .createDeposit(amount: amount, utr: utr, currency: currency);
+    final record = await ref.read(walletRepositoryProvider).createDeposit(
+          amount: amount,
+          utr: utr,
+          currency: currency,
+          plan: plan,
+        );
     state = AsyncData([record, ...?state.value]);
+    // Buying a plan changes what the deposit screen should offer next time,
+    // and the agent's own record once an admin approves it.
+    if (plan != null) {
+      ref.invalidate(depositConfigProvider);
+    }
     return record;
   }
 }

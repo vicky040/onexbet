@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -24,13 +25,14 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   final _mobile = TextEditingController();
   final _email = TextEditingController();
   final _password = TextEditingController();
+  final _referral = TextEditingController();
   final _confirm = TextEditingController();
   var _acceptedTerms = false;
   var _loading = false;
 
   @override
   void dispose() {
-    for (final c in [_name, _mobile, _email, _password, _confirm]) {
+    for (final c in [_name, _mobile, _email, _password, _confirm, _referral]) {
       c.dispose();
     }
     super.dispose();
@@ -46,6 +48,9 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 mobile: _mobile.text.trim(),
                 email: _email.text,
                 password: _password.text,
+                referralCode: _referral.text.trim().isEmpty
+                    ? null
+                    : _referral.text.trim().toUpperCase(),
               );
       // An account awaiting approval has no session, so the router will not
       // move: send them back to the login screen with an explanation.
@@ -115,6 +120,21 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 label: 'Confirm password',
                 textInputAction: TextInputAction.done,
                 validator: (v) => Validators.confirmPassword(v, _password.text),
+              ),
+              formGap,
+              TextFormField(
+                key: const Key('signupReferral'),
+                controller: _referral,
+                textCapitalization: TextCapitalization.characters,
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp('[A-Za-z0-9]')),
+                  LengthLimitingTextInputFormatter(12),
+                ],
+                decoration: const InputDecoration(
+                  labelText: 'Referral code (optional)',
+                  helperText: 'If a master invited you, enter their code',
+                  prefixIcon: Icon(Icons.group_add_outlined),
+                ),
               ),
               const SizedBox(height: 6),
               FormField<bool>(

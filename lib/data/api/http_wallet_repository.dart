@@ -69,10 +69,16 @@ class HttpWalletRepository implements WalletRepository {
     required double amount,
     required String utr,
     String currency = 'INR',
+    String? plan,
   }) async {
     final data = await _api.post(
       '/deposits',
-      body: {'amount': amount, 'utr': utr, 'currency': currency},
+      body: {
+        'amount': amount,
+        'utr': utr,
+        'currency': currency,
+        'plan': ?plan,
+      },
     );
     return parseResponse(() => DepositRecord.fromJson(asObject(data)));
   }

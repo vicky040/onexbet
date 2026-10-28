@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/auth";
+import { requireFullAdmin } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { prisma } from "@/lib/db";
 import { ApiError } from "@/lib/errors";
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 type Params = { params: Promise<{ id: string }> };
 
 export const GET = withRoute(async (_request: Request, { params }: Params) => {
-  await requireAdmin();
+  await requireFullAdmin();
   const { id } = await params;
 
   const payout = await prisma.payout.findUnique({
@@ -31,7 +31,7 @@ export const GET = withRoute(async (_request: Request, { params }: Params) => {
  * settled payout cannot be edited here.
  */
 export const PATCH = withRoute(async (request: Request, { params }: Params) => {
-  const admin = await requireAdmin();
+  const admin = await requireFullAdmin();
   const { id } = await params;
   const body = await readBody(request, updatePayoutSchema);
 

@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/auth";
+import { requireFullAdmin } from "@/lib/auth";
 import { ok, withRoute } from "@/lib/http";
 import { rejectDeposit } from "@/lib/operations";
 import { adminDeposit } from "@/lib/admin-serializers";
@@ -10,7 +10,7 @@ type Params = { params: Promise<{ id: string }> };
 
 /** Rejects the deposit. The reason reaches the agent as a notification. */
 export const POST = withRoute(async (request: Request, { params }: Params) => {
-  const admin = await requireAdmin();
+  const admin = await requireFullAdmin();
   const { id } = await params;
 
   let note: string | undefined;

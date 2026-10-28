@@ -36,7 +36,10 @@ export default async function SettingsPage() {
             {[
               ["Default payin commission", formatPercent(settings.defaultPayinCommissionRate.toString())],
               ["Default payout commission", formatPercent(settings.defaultPayoutCommissionRate.toString())],
-              ["Minimum deposit", `${settings.minDepositUsdt.toString()} USDT`],
+              ["Agent plan", `${settings.agentPlanUsdt.toString()} USDT`],
+              ["Master plan", `${settings.masterPlanUsdt.toString()} USDT`],
+              ["Bank transfer", settings.bankTransferEnabled ? "Enabled" : "Disabled"],
+              ["Minimum top-up", `${settings.minDepositUsdt.toString()} USDT`],
               ["USDT rate", formatInr(settings.usdtInrRate.toString())],
               ["Minimum deposit (₹)", formatInr(Number(settings.minDepositUsdt) * Number(settings.usdtInrRate))],
               ["USDT network", settings.usdtNetwork],
@@ -101,13 +104,13 @@ export default async function SettingsPage() {
           <div className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <Field
-                label="Minimum deposit (USDT)"
+                label="Minimum top-up (USDT)"
                 name="minDepositUsdt"
                 type="number"
                 step="0.01"
                 min="0"
                 defaultValue={settings.minDepositUsdt.toString()}
-                hint="Applies to both currencies"
+                hint="For agents who have already joined"
               />
               <Field
                 label="USDT rate (₹ per USDT)"
@@ -134,6 +137,44 @@ export default async function SettingsPage() {
               label="Approve deposits automatically"
               hint="Credits an agent's balance the moment they submit, with no review. Leave off unless you reconcile another way."
               defaultChecked={settings.autoApproveDeposits}
+            />
+          </div>
+        </Card>
+
+        <Card
+          title="Joining plans"
+          description="What a new agent pays to join. Their first deposit must match one of these exactly; afterwards they top up freely above the minimum."
+        >
+          <div className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field
+                label="Agent plan (USDT)"
+                name="agentPlanUsdt"
+                type="number"
+                step="0.01"
+                min="0.01"
+                defaultValue={settings.agentPlanUsdt.toString()}
+                hint={`About ${formatInr(
+                  Number(settings.agentPlanUsdt) * Number(settings.usdtInrRate),
+                )}`}
+              />
+              <Field
+                label="Master plan (USDT)"
+                name="masterPlanUsdt"
+                type="number"
+                step="0.01"
+                min="0.01"
+                defaultValue={settings.masterPlanUsdt.toString()}
+                hint={`About ${formatInr(
+                  Number(settings.masterPlanUsdt) * Number(settings.usdtInrRate),
+                )}`}
+              />
+            </div>
+            <Checkbox
+              name="bankTransferEnabled"
+              label="Accept bank transfers"
+              hint="Off means USDT only. Turning it on adds the rupee option back to the app's Deposit screen."
+              defaultChecked={settings.bankTransferEnabled}
             />
           </div>
         </Card>

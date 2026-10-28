@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/auth";
+import { requireFullAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { ApiError } from "@/lib/errors";
 import { ok, readBody, withRoute } from "@/lib/http";
@@ -11,7 +11,7 @@ type Params = { params: Promise<{ agentId: string }> };
 
 /** The whole thread, oldest first. Reading it marks the agent's messages read. */
 export const GET = withRoute(async (_request: Request, { params }: Params) => {
-  await requireAdmin();
+  await requireFullAdmin();
   const { agentId } = await params;
 
   const agent = await prisma.agent.findUnique({
@@ -38,7 +38,7 @@ export const GET = withRoute(async (_request: Request, { params }: Params) => {
 
 /** Replies as support. The agent sees it in the app's chat. */
 export const POST = withRoute(async (request: Request, { params }: Params) => {
-  const admin = await requireAdmin();
+  const admin = await requireFullAdmin();
   const { agentId } = await params;
   const { text } = await readBody(request, adminReplySchema);
 

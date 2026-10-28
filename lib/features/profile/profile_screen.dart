@@ -120,6 +120,11 @@ class ProfileScreen extends ConsumerWidget {
                   KvRow('Name', user.name),
                   KvRow('Mobile', '+91 ${user.mobile}'),
                   KvRow('Email', user.email),
+                  if (user.hasJoined)
+                    KvRow('Plan', user.isMaster ? 'Master' : 'Agent'),
+                  // A master shares this with the agents they bring in.
+                  if (user.referralCode != null)
+                    KvRow('Referral code', user.referralCode!),
                 ],
               ),
             ),

@@ -7,6 +7,8 @@ class User {
     required this.email,
     this.id = '',
     this.status = 'ACTIVE',
+    this.plan = 'NONE',
+    this.referralCode,
   });
 
   final String name;
@@ -17,7 +19,15 @@ class User {
   /// `ACTIVE`, `PENDING` or `BLOCKED`.
   final String status;
 
+  /// `NONE` until the joining deposit is approved, then `AGENT` or `MASTER`.
+  final String plan;
+
+  /// A master's referral code.
+  final String? referralCode;
+
   bool get isActive => status == 'ACTIVE';
+  bool get hasJoined => plan != 'NONE';
+  bool get isMaster => plan == 'MASTER';
 
   String get firstName => name.trim().split(RegExp(r'\s+')).first;
 
@@ -27,6 +37,8 @@ class User {
         mobile: asString(json['mobile']),
         email: asString(json['email']),
         status: json['status'] == null ? 'ACTIVE' : asString(json['status']),
+        plan: json['plan'] == null ? 'NONE' : asString(json['plan']),
+        referralCode: json['referralCode'] as String?,
       );
 
   Map<String, dynamic> toJson() => {
@@ -35,5 +47,6 @@ class User {
         'mobile': mobile,
         'email': email,
         'status': status,
+        'plan': plan,
       };
 }

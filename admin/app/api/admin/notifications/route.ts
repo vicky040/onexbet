@@ -1,5 +1,5 @@
 import type { Prisma } from "@prisma/client";
-import { requireAdmin } from "@/lib/auth";
+import { requireFullAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { ok, pageMeta, readBody, readPagination, withRoute } from "@/lib/http";
 import { sendNotification } from "@/lib/operations";
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 /** Everything sent, newest first. `?agentId=` narrows to one agent. */
 export const GET = withRoute(async (request: Request) => {
-  await requireAdmin();
+  await requireFullAdmin();
   const url = new URL(request.url);
   const page = readPagination(url);
   const agentId = url.searchParams.get("agentId") || undefined;
@@ -46,7 +46,7 @@ export const GET = withRoute(async (request: Request) => {
 
 /** Sends to one agent, or to every active agent when `broadcast` is true. */
 export const POST = withRoute(async (request: Request) => {
-  const admin = await requireAdmin();
+  const admin = await requireFullAdmin();
   const body = await readBody(request, sendNotificationSchema);
 
   const result = await sendNotification({

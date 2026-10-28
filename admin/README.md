@@ -111,7 +111,30 @@ components querying Prisma (no HTTP hop); forms post to server actions. The
 admin REST API covers the same ground for scripts and automation, so a page
 and an endpoint always agree.
 
+### Joining plans
+
+A new agent is on no plan (`NONE`) and cannot trade. Their **first** deposit
+buys one, and must match its price exactly:
+
+| Plan | Price | What it gives |
+| --- | --- | --- |
+| Agent | `agentPlanUsdt` (3000) | Payins and payouts |
+| Master | `masterPlanUsdt` (5000) | The same, plus a panel account scoped to their referrals |
+
+The plan is recorded on the deposit and only applied when an admin
+**approves** it — paying does not promote anyone by itself. Approving a
+Master deposit also mints the agent's referral code, which is what new
+sign-ups quote to be attached to them.
+
+After joining, deposits are ordinary top-ups: any amount at or above
+`minDepositUsdt`, with no plan attached.
+
 ### Deposits in two currencies
+
+Bank transfer is **off** by default (`bankTransferEnabled`), so USDT is the
+only option the app offers. Turning it on in Settings puts the rupee option
+back; until then `POST /deposits` refuses `currency: "INR"` outright rather
+than relying on the app to hide it.
 
 An agent can fund their float by bank transfer or by sending USDT.
 
@@ -120,7 +143,7 @@ at the rate in Settings, and both the USDT amount and the rate used are
 stored on the record, so a later rate change cannot rewrite what someone was
 credited. The client sends what it sent; it never decides what it is worth.
 
-One minimum drives both: `minDepositUsdt` (3000 by default). The rupee
+One minimum drives both top-ups: `minDepositUsdt` (3000 by default). The rupee
 minimum is that valued at `usdtInrRate`, so the two currencies always ask for
 the same worth — set the rate to 90 and the rupee floor becomes ₹270,000.
 
@@ -155,21 +178,34 @@ would take a balance below zero is refused.
 
 ## Who can do what
 
-Two roles, set per panel user under **Panel users** (super admins only):
+Three roles, set per panel user under **Panel users** (super admins only):
 
-| | Operator | Super admin |
-| --- | --- | --- |
-| Read every screen | yes | yes |
-| Approve / reject deposits | yes | yes |
-| Create, settle, fail, release payouts | yes | yes |
-| Record a payin | yes | yes |
-| Send notifications, answer support | yes | yes |
-| Create and edit agents, incl. commission rates | — | yes |
-| Adjust an agent's balance | — | yes |
-| Correct a payin or payout | — | yes |
-| Change bank account details, turn them on/off | — | yes |
-| Edit platform settings and default commissions | — | yes |
-| Manage panel users | — | yes |
+| | Operator | Super admin | Master |
+| --- | --- | --- | --- |
+| Read every screen | yes | yes | — |
+| Approve / reject deposits | yes | yes | — |
+| Create, settle, fail, release payouts | yes | yes | — |
+| Record a payin | yes | yes | — |
+| Send notifications, answer support | yes | yes | — |
+| Create and edit agents, incl. commission rates | — | yes | — |
+| Adjust an agent's balance | — | yes | — |
+| Correct a payin or payout | — | yes | — |
+| Change bank account details, turn them on/off | — | yes | — |
+| Edit platform settings and default commissions | — | yes | — |
+| Manage panel users | — | yes | — |
+| See the agents they referred | — | yes | yes |
+| Set those agents' payin/payout commission | — | yes | yes |
+
+A **master** is an agent who bought the Master plan, so their panel account
+is tied to their agent record. They see two menu items — Dashboard and
+Agents — and both are filtered to the agents who signed up with their
+referral code. Within that list the only thing they may change is a
+commission rate: not status, not balance, not bank details.
+
+The scope is enforced in the queries, not by hiding rows. A master asking
+for an agent they did not refer gets a 404, the same answer as for an agent
+that does not exist, so the list cannot be used to discover who else exists.
+A master account with no agent attached fails closed.
 
 The gate is enforced on the API and on the server actions behind the forms,
 not just by hiding buttons — an operator calling the endpoint directly gets

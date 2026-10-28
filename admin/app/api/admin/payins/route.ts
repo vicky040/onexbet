@@ -1,5 +1,5 @@
 import type { Prisma } from "@prisma/client";
-import { requireAdmin } from "@/lib/auth";
+import { requireFullAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { ok, pageMeta, readBody, readPagination, withRoute } from "@/lib/http";
 import { recordPayin } from "@/lib/operations";
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 /** `?agentId=`, `?q=` (reference or player txn ref). */
 export const GET = withRoute(async (request: Request) => {
-  await requireAdmin();
+  await requireFullAdmin();
   const url = new URL(request.url);
   const page = readPagination(url);
 
@@ -58,7 +58,7 @@ export const GET = withRoute(async (request: Request) => {
  * commission is credited. Refused if it would take the balance below zero.
  */
 export const POST = withRoute(async (request: Request) => {
-  const admin = await requireAdmin();
+  const admin = await requireFullAdmin();
   const body = await readBody(request, createPayinSchema);
 
   const payin = await recordPayin({

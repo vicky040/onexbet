@@ -66,6 +66,8 @@ export function serializeAgent(agent: Agent) {
     mobile: agent.mobile,
     email: agent.email,
     status: agent.status,
+    plan: agent.plan,
+    referralCode: agent.referralCode,
     payinCommissionRate: toNumber(agent.payinCommissionRate),
     payoutCommissionRate: toNumber(agent.payoutCommissionRate),
     createdAt: iso(agent.createdAt),
@@ -146,6 +148,7 @@ export function serializeDeposit(deposit: Deposit) {
     previousBalance: toNumber(deposit.previousBalance),
     amount: toNumber(deposit.amount),
     currency: deposit.currency,
+    plan: deposit.plan,
     amountUsdt:
       deposit.amountUsdt === null ? null : toNumber(deposit.amountUsdt),
     usdtRate: deposit.usdtRate === null ? null : toNumber(deposit.usdtRate),

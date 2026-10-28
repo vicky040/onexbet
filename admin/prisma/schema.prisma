@@ -17,6 +17,16 @@ datasource db {
 enum AdminRole {
   SUPER_ADMIN
   OPERATOR
+  /// An agent on the Master plan. Sees only the agents they referred, and
+  /// may change nothing about them but their commission rates.
+  MASTER_ADMIN
+}
+
+/// What an agent paid to join. NONE until their joining deposit clears.
+enum AgentPlan {
+  NONE
+  AGENT
+  MASTER
 }
 
 enum AgentStatus {
@@ -57,11 +67,15 @@ model Admin {
   name         String
   passwordHash String
   role         AdminRole @default(OPERATOR)
+  /// Set for a MASTER_ADMIN: the agent this panel account belongs to, which
+  /// is how we know whose referrals they may see.
+  agentId      String?   @unique
   isActive     Boolean   @default(true)
   lastLoginAt  DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
+  agent            Agent?           @relation("MasterPanelAccount", fields: [agentId], references: [id], onDelete: Cascade)
   reviewedDeposits Deposit[]        @relation("DepositReviewer")
   createdPayouts   Payout[]         @relation("PayoutCreator")
   createdPayins    Payin[]          @relation("PayinCreator")
@@ -85,10 +99,20 @@ model Agent {
   /// Percentage the agent earns on each payin, e.g. 5.50.
   payinCommissionRate  Decimal     @default(5.50) @db.Decimal(5, 2)
   payoutCommissionRate Decimal     @default(2.00) @db.Decimal(5, 2)
+  /// Set when the joining deposit is approved.
+  plan                 AgentPlan   @default(NONE)
+  /// Masters get one, to share with the agents they bring in.
+  referralCode         String?     @unique
+  /// The master who referred this agent, if any.
+  referredById         String?
   notes                String?
   lastLoginAt          DateTime?
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
+
+  referredBy      Agent?           @relation("AgentReferral", fields: [referredById], references: [id], onDelete: SetNull)
+  referrals       Agent[]          @relation("AgentReferral")
+  panelAccount    Admin?           @relation("MasterPanelAccount")
 
   bankAccounts    BankAccount[]
   payins          Payin[]
@@ -101,6 +125,7 @@ model Agent {
 
   @@index([status])
   @@index([createdAt])
+  @@index([referredById])
 }
 
 model BankAccount {
@@ -191,6 +216,8 @@ model Deposit {
   /// Only set once the deposit is approved.
   afterBalance    Decimal?  @db.Decimal(14, 2)
   status          TxnStatus @default(PENDING)
+  /// Set when this deposit is buying a plan rather than topping up a float.
+  plan            AgentPlan?
   currency        DepositCurrency @default(INR)
   /// Only for a USDT deposit: what was sent, and the rate it was valued at.
   /// Stored so a later rate change cannot rewrite what the agent was credited.
@@ -285,9 +312,14 @@ model Settings {
   id                          String   @id @default("default")
   defaultPayinCommissionRate  Decimal  @default(5.50) @db.Decimal(5, 2)
   defaultPayoutCommissionRate Decimal  @default(2.00) @db.Decimal(5, 2)
-  /// Minimum deposit, in USDT. The rupee minimum is this valued at
-  /// usdtInrRate, so the two are always worth the same.
+  /// Minimum top-up once an agent has joined, in USDT. The rupee minimum is
+  /// this valued at usdtInrRate, so the two are always worth the same.
   minDepositUsdt              Decimal  @default(3000) @db.Decimal(14, 2)
+  /// What the two joining plans cost, in USDT.
+  agentPlanUsdt               Decimal  @default(3000) @db.Decimal(14, 2)
+  masterPlanUsdt              Decimal  @default(5000) @db.Decimal(14, 2)
+  /// Off until bank transfers are ready; USDT only in the meantime.
+  bankTransferEnabled         Boolean  @default(false)
   /// What one USDT is worth in rupees. Set by a super admin.
   usdtInrRate                 Decimal  @default(90) @db.Decimal(12, 4)
   /// Where agents send USDT, and on which chain.

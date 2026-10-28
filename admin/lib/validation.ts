@@ -63,6 +63,10 @@ export const signupSchema = z.object({
   mobile: mobileSchema,
   email: emailSchema,
   password: passwordSchema,
+  /// A master's code, tying this agent to them. Optional.
+  referralCode: z
+    .union([z.literal(""), z.string().trim().min(4).max(16)])
+    .optional(),
 });
 
 export const refreshSchema = z.object({
@@ -117,7 +121,9 @@ export const setBankActiveSchema = z.object({ isActive: z.boolean() });
  */
 export const createDepositSchema = z.object({
   amount: amountSchema,
-  currency: z.enum(["INR", "USDT"]).default("INR"),
+  currency: z.enum(["INR", "USDT"]).default("USDT"),
+  /// Required for an agent who has not joined yet; ignored afterwards.
+  plan: z.enum(["AGENT", "MASTER"]).optional(),
   utr: z
     .string()
     .trim()
@@ -234,16 +240,26 @@ export const adminReplySchema = z.object({
 // Super-admin only
 // ---------------------------------------------------------------------------
 
-export const createAdminSchema = z.object({
-  name: nameSchema,
-  email: emailSchema,
-  password: passwordSchema,
-  role: z.enum(["SUPER_ADMIN", "OPERATOR"]).optional(),
-});
+export const createAdminSchema = z
+  .object({
+    name: nameSchema,
+    email: emailSchema,
+    password: passwordSchema,
+    role: z.enum(["SUPER_ADMIN", "OPERATOR", "MASTER_ADMIN"]).optional(),
+    /// Required for a MASTER_ADMIN: the agent whose referrals they manage.
+    agentId: z.string().min(1).optional(),
+  })
+  .refine(
+    (value) => value.role !== "MASTER_ADMIN" || Boolean(value.agentId),
+    {
+      message: "Choose the agent this master account belongs to",
+      path: ["agentId"],
+    },
+  );
 
 export const updateAdminSchema = z.object({
   name: nameSchema.optional(),
-  role: z.enum(["SUPER_ADMIN", "OPERATOR"]).optional(),
+  role: z.enum(["SUPER_ADMIN", "OPERATOR", "MASTER_ADMIN"]).optional(),
   isActive: z.boolean().optional(),
   password: passwordSchema.optional(),
 });
@@ -287,6 +303,9 @@ export const updateSettingsSchema = z.object({
   defaultPayinCommissionRate: rateSchema.optional(),
   defaultPayoutCommissionRate: rateSchema.optional(),
   minDepositUsdt: z.coerce.number().min(0).max(99_999_999).optional(),
+  agentPlanUsdt: z.coerce.number().positive().max(99_999_999).optional(),
+  masterPlanUsdt: z.coerce.number().positive().max(99_999_999).optional(),
+  bankTransferEnabled: z.boolean().optional(),
   usdtInrRate: z.coerce
     .number()
     .positive("The USDT rate must be greater than zero")

@@ -26,11 +26,23 @@ export default async function PanelLayout({
   const admin = await getAdmin();
   if (!admin) redirect("/login");
 
+  const isMaster = admin.role === "MASTER_ADMIN";
+
+  // A master's badges must count only their own agents, or the number would
+  // describe a platform they cannot see.
+  const masterAgentFilter = isMaster && admin.agentId
+    ? { referredById: admin.agentId }
+    : {};
+
   const [deposits, payouts, support, pendingAgents] = await Promise.all([
-    prisma.deposit.count({ where: { status: "PENDING" } }),
-    prisma.payout.count({ where: { status: "PAYMENT_RECEIVED" } }),
-    prisma.supportMessage.count({ where: { fromAgent: true, readByAdmin: false } }),
-    prisma.agent.count({ where: { status: "PENDING" } }),
+    isMaster ? 0 : prisma.deposit.count({ where: { status: "PENDING" } }),
+    isMaster ? 0 : prisma.payout.count({ where: { status: "PAYMENT_RECEIVED" } }),
+    isMaster
+      ? 0
+      : prisma.supportMessage.count({
+          where: { fromAgent: true, readByAdmin: false },
+        }),
+    prisma.agent.count({ where: { status: "PENDING", ...masterAgentFilter } }),
   ]);
 
   const badges: NavBadges = {
@@ -39,8 +51,6 @@ export default async function PanelLayout({
     support,
     agents: pendingAgents,
   };
-
-  const isSuperAdmin = admin.role === "SUPER_ADMIN";
 
   const account = (
     <>
@@ -66,12 +76,8 @@ export default async function PanelLayout({
 
   return (
     <div className="flex min-h-screen flex-col lg:flex-row">
-      <MobileNav
-        badges={badges}
-        isSuperAdmin={isSuperAdmin}
-        footer={account}
-      />
-      <Sidebar badges={badges} isSuperAdmin={isSuperAdmin} footer={account} />
+      <MobileNav badges={badges} role={admin.role} footer={account} />
+      <Sidebar badges={badges} role={admin.role} footer={account} />
 
       <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
         <div className="mx-auto max-w-6xl">{children}</div>

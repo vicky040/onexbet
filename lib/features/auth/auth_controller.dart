@@ -34,12 +34,14 @@ class AuthController extends AsyncNotifier<User?> {
     required String mobile,
     required String email,
     required String password,
+    String? referralCode,
   }) async {
     final result = await _repo.signup(
       name: name,
       mobile: mobile,
       email: email,
       password: password,
+      referralCode: referralCode,
     );
     if (!result.pendingApproval) state = AsyncData(result.user);
     return result.pendingApproval;

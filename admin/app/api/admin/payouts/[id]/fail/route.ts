@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/auth";
+import { requireFullAdmin } from "@/lib/auth";
 import { ok, withRoute } from "@/lib/http";
 import { failPayout } from "@/lib/operations";
 import { adminPayout } from "@/lib/admin-serializers";
@@ -10,7 +10,7 @@ type Params = { params: Promise<{ id: string }> };
 
 /** Marks a payout failed. No balance moves; the agent is notified. */
 export const POST = withRoute(async (request: Request, { params }: Params) => {
-  const admin = await requireAdmin();
+  const admin = await requireFullAdmin();
   const { id } = await params;
 
   let note: string | undefined;

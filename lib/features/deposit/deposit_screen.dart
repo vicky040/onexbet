@@ -45,6 +45,9 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
   var _currencyCode = 'INR';
   var _submitting = false;
 
+  /// `AGENT` or `MASTER` while the agent is buying their joining plan.
+  String? _planCode;
+
   @override
   void dispose() {
     _amount.dispose();
@@ -103,17 +106,23 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     }
   }
 
-  Future<void> _submit() async {
+  Future<void> _submit(DepositCurrencyOption currency) async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _submitting = true);
     try {
       await ref.read(depositsProvider.notifier).create(
             amount: double.parse(_amount.text.trim()),
             utr: _reference.text.trim(),
-            currency: _currencyCode,
+            currency: currency.code,
+            plan: _planCode,
           );
       if (!mounted) return;
-      showMessage(context, 'Deposit request submitted for verification');
+      showMessage(
+        context,
+        _planCode == null
+            ? 'Deposit request submitted for verification'
+            : 'Payment submitted. Your plan starts once it is approved.',
+      );
       context.go(Routes.history);
     } catch (e) {
       if (mounted) showMessage(context, 'Could not submit deposit: $e');
@@ -136,6 +145,8 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
         data: (config) {
           final currency =
               config.byCode(_currencyCode) ?? config.currencies.first;
+          // Buying the first plan, rather than topping up an existing one.
+          final joining = !config.hasJoined && config.plans.isNotEmpty;
 
           return Form(
             key: _formKey,
@@ -173,13 +184,34 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
                       ),
                       const SizedBox(height: 18),
 
-                      _CurrencyPicker(
-                        currencies: config.currencies,
-                        selected: currency.code,
-                        onChanged: _selectCurrency,
-                      ),
-                      const SizedBox(height: 18),
+                      if (joining) ...[
+                        _PlanPicker(
+                          plans: config.plans,
+                          selected: _planCode,
+                          onChanged: (plan) => setState(() {
+                            _planCode = plan.code;
+                            // The server checks the price exactly, so the
+                            // amount is the plan's, not the agent's to type.
+                            _amount.text = plan.priceUsdt.toStringAsFixed(0);
+                          }),
+                        ),
+                        const SizedBox(height: 18),
+                      ] else if (config.currencies.length > 1) ...[
+                        _CurrencyPicker(
+                          currencies: config.currencies,
+                          selected: currency.code,
+                          onChanged: _selectCurrency,
+                        ),
+                        const SizedBox(height: 18),
+                      ],
 
+                      if (joining && _planCode == null)
+                        const Text(
+                          'Choose a plan to see the payment details.',
+                          style: AppTextStyles.muted,
+                        ),
+
+                      if (!joining || _planCode != null) ...[
                       if (currency.isUsdt) ...[
                         _UsdtPanel(currency: currency),
                         const SizedBox(height: 18),
@@ -207,6 +239,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
                                   ' USDT at ${formatInr(config.usdtInrRate)})',
                           helperMaxLines: 2,
                         ),
+                        readOnly: joining,
                         validator: (v) => _validateAmount(currency, v),
                         onChanged: (_) => setState(() {}),
                       ),
@@ -217,7 +250,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
                       ),
 
                       const SizedBox(height: 10),
-                      Wrap(
+                      if (!joining) Wrap(
                         spacing: 8,
                         runSpacing: 8,
                         children: [
@@ -266,10 +299,11 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
                       ),
                       const SizedBox(height: 20),
                       PrimaryButton(
-                        label: 'Submit deposit',
+                        label: joining ? 'I have paid' : 'Submit deposit',
                         loading: _submitting,
-                        onPressed: _submit,
+                        onPressed: () => _submit(currency),
                       ),
+                      ],
                     ],
                   ),
                 ),
@@ -287,6 +321,137 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+/// The two joining plans. An agent buys exactly one, once.
+class _PlanPicker extends StatelessWidget {
+  const _PlanPicker({
+    required this.plans,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final List<JoiningPlan> plans;
+  final String? selected;
+  final ValueChanged<JoiningPlan> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text('Choose your plan', style: AppTextStyles.kvLabel),
+        const SizedBox(height: 10),
+        for (final plan in plans) ...[
+          _PlanCard(
+            plan: plan,
+            selected: plan.code == selected,
+            onTap: () => onChanged(plan),
+          ),
+          const SizedBox(height: 10),
+        ],
+      ],
+    );
+  }
+}
+
+class _PlanCard extends StatelessWidget {
+  const _PlanCard({
+    required this.plan,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final JoiningPlan plan;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? AppColors.primaryBlue : AppColors.border,
+            width: selected ? 2 : 1,
+          ),
+          color: selected
+              ? AppColors.primaryBlue.withValues(alpha: 0.06)
+              : null,
+        ),
+        child: Row(
+          children: [
+            Icon(
+              selected
+                  ? Icons.radio_button_checked
+                  : Icons.radio_button_unchecked,
+              color: selected ? AppColors.primaryBlue : AppColors.textMuted,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // A Wrap, not a Row: on a narrow phone the badge drops
+                  // under the name instead of overflowing.
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        plan.label,
+                        style: AppTextStyles.kvLabel.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      if (plan.isMaster)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryBlue,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Text(
+                            'PANEL ACCESS',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(plan.description, style: AppTextStyles.muted),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  '${plan.priceUsdt.toStringAsFixed(0)} USDT',
+                  style: AppTextStyles.statValue.copyWith(fontSize: 16),
+                ),
+                Text(formatInr(plan.priceInr), style: AppTextStyles.muted),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -32,31 +32,67 @@ export const GET = withRoute(async (request: Request) => {
 /**
  * Backs WalletRepository.createDeposit() — the Deposit screen.
  *
- * `amount` is in `currency`. Both currencies have to be worth the same
- * minimum, so the rupee floor is the USDT minimum valued at the configured
- * rate rather than a number of its own.
+ * An agent who has not joined yet is buying a plan, so `plan` is required
+ * and the amount must match that plan's price exactly. Afterwards it is an
+ * ordinary top-up and only the minimum applies.
+ *
+ * Bank transfer is refused while the switch is off, so turning it on is the
+ * only thing standing between here and accepting rupees.
  */
 export const POST = withRoute(async (request: Request) => {
   const agent = await requireAgent(request);
   const body = await readBody(request, createDepositSchema);
   const settings = await getSettings();
 
-  const minUsdt = toNumber(settings.minDepositUsdt);
-  const rate = toNumber(settings.usdtInrRate);
-  const minInr = toNumber(D(settings.minDepositUsdt).mul(settings.usdtInrRate));
+  if (body.currency === "INR" && !settings.bankTransferEnabled) {
+    throw ApiError.badRequest(
+      "Bank transfer is not available yet. Please pay in USDT.",
+    );
+  }
 
-  if (body.currency === "USDT") {
-    if (body.amount < minUsdt) {
+  const rate = toNumber(settings.usdtInrRate);
+  const hasJoined = agent.plan !== "NONE";
+  let plan: "AGENT" | "MASTER" | undefined;
+
+  if (!hasJoined) {
+    // The first deposit buys a plan, so the amount is not the agent's to
+    // choose — it is whatever that plan costs.
+    if (!body.plan) {
       throw ApiError.badRequest(
-        `Minimum deposit is ${minUsdt.toLocaleString("en-IN")} USDT`,
+        "Choose the Agent or Master plan to get started",
       );
     }
-  } else if (body.amount < minInr) {
-    throw ApiError.badRequest(
-      `Minimum deposit is ${formatInr(minInr)} (${minUsdt.toLocaleString(
-        "en-IN",
-      )} USDT at ${formatInr(rate)})`,
-    );
+
+    plan = body.plan;
+    const priceUsdt =
+      plan === "MASTER" ? settings.masterPlanUsdt : settings.agentPlanUsdt;
+    const expected =
+      body.currency === "USDT" ? toNumber(priceUsdt) : toNumber(D(priceUsdt).mul(rate));
+
+    if (Math.abs(body.amount - expected) > 0.01) {
+      throw ApiError.badRequest(
+        body.currency === "USDT"
+          ? `The ${plan === "MASTER" ? "Master" : "Agent"} plan costs ${expected.toLocaleString("en-IN")} USDT`
+          : `The ${plan === "MASTER" ? "Master" : "Agent"} plan costs ${formatInr(expected)}`,
+      );
+    }
+  } else {
+    const minUsdt = toNumber(settings.minDepositUsdt);
+    const minInr = toNumber(D(settings.minDepositUsdt).mul(settings.usdtInrRate));
+
+    if (body.currency === "USDT") {
+      if (body.amount < minUsdt) {
+        throw ApiError.badRequest(
+          `Minimum deposit is ${minUsdt.toLocaleString("en-IN")} USDT`,
+        );
+      }
+    } else if (body.amount < minInr) {
+      throw ApiError.badRequest(
+        `Minimum deposit is ${formatInr(minInr)} (${minUsdt.toLocaleString(
+          "en-IN",
+        )} USDT at ${formatInr(rate)})`,
+      );
+    }
   }
 
   const duplicate = await prisma.deposit.findFirst({
@@ -74,6 +110,7 @@ export const POST = withRoute(async (request: Request) => {
     amount: body.amount,
     currency: body.currency,
     usdtRate: rate,
+    plan,
     utr: body.utr,
     proofUrl: body.proofUrl,
     autoApprove: settings.autoApproveDeposits,

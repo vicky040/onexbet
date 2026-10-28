@@ -187,37 +187,43 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('offers both currencies, with INR selected', (tester) async {
+    testWidgets('only USDT is offered while bank transfer is off',
+        (tester) async {
       await pumpApp(tester, loggedIn: true);
+      await openDeposit(tester);
+
+      // One currency means no picker to get wrong: the wallet is shown
+      // straight away.
+      expect(find.byKey(const Key('currency_INR')), findsNothing);
+      expect(find.text('TBbwzuMH3nHdYMqft3vNtnvjRtGDVb7LVE'), findsOneWidget);
+      expect(find.textContaining('Minimum 3000 USDT'), findsOneWidget);
+    });
+
+    testWidgets('bank transfer comes back when the server enables it',
+        (tester) async {
+      await pumpApp(
+        tester,
+        loggedIn: true,
+        wallet: FakeWalletRepository()..bankTransferEnabled = true,
+      );
       await openDeposit(tester);
 
       expect(find.byKey(const Key('currency_INR')), findsOneWidget);
       expect(find.byKey(const Key('currency_USDT')), findsOneWidget);
-      // The rupee minimum is the USDT minimum at the day's rate.
-      expect(find.textContaining('Minimum ₹270000.00'), findsOneWidget);
-      // No wallet details until USDT is chosen.
-      expect(find.textContaining('TBbwzuMH3nHdY'), findsNothing);
     });
 
     testWidgets('USDT shows the address, network and QR', (tester) async {
       await pumpApp(tester, loggedIn: true);
       await openDeposit(tester);
 
-      await tester.tap(find.byKey(const Key('currency_USDT')));
-      await tester.pumpAndSettle();
-
       expect(find.text('TBbwzuMH3nHdYMqft3vNtnvjRtGDVb7LVE'), findsOneWidget);
       expect(find.text('Network: TRC20 (Tron)'), findsOneWidget);
       expect(find.byType(Image), findsWidgets);
-      expect(find.textContaining('Minimum 3000 USDT'), findsOneWidget);
     });
 
     testWidgets('a USDT amount below the minimum is refused', (tester) async {
       await pumpApp(tester, loggedIn: true);
       await openDeposit(tester);
-
-      await tester.tap(find.byKey(const Key('currency_USDT')));
-      await tester.pumpAndSettle();
 
       await tester.enterText(find.byKey(const Key('depositAmount')), '2999');
       await tester.enterText(
@@ -234,12 +240,8 @@ void main() {
       await pumpApp(tester, loggedIn: true, wallet: wallet);
       await openDeposit(tester);
 
-      await tester.tap(find.byKey(const Key('currency_USDT')));
-      await tester.pumpAndSettle();
-
       await tester.enterText(find.byKey(const Key('depositAmount')), '3000');
       await tester.pumpAndSettle();
-      // The agent is told what it is worth before submitting.
       expect(find.textContaining('Credits about ₹270000.00'), findsOneWidget);
 
       await tester.enterText(
@@ -249,20 +251,79 @@ void main() {
       await submitDeposit(tester);
 
       expect(wallet.lastDepositCurrency, 'USDT');
+      // A top-up, not a plan purchase.
+      expect(wallet.lastDepositPlan, isNull);
     });
+  });
 
-    testWidgets('an INR amount below the minimum is refused', (tester) async {
-      await pumpApp(tester, loggedIn: true);
+  group('joining plans', () {
+    Future<void> openDeposit(WidgetTester tester) async {
+      final addDeposit = find.text('Add deposit');
+      await tester.scrollUntilVisible(addDeposit, 200);
+      await tester.pumpAndSettle();
+      await tester.tap(addDeposit);
+      await tester.pumpAndSettle();
+    }
+
+    FakeWalletRepository joining() => FakeWalletRepository()..hasJoined = false;
+
+    testWidgets('both plans are offered, with nothing else until one is picked',
+        (tester) async {
+      await pumpApp(tester, loggedIn: true, wallet: joining());
       await openDeposit(tester);
 
-      await tester.enterText(find.byKey(const Key('depositAmount')), '5000');
+      expect(find.text('Agent'), findsOneWidget);
+      expect(find.text('Master'), findsOneWidget);
+      expect(find.text('3000 USDT'), findsOneWidget);
+      expect(find.text('5000 USDT'), findsOneWidget);
+      expect(find.text('PANEL ACCESS'), findsOneWidget);
+
+      // The QR only makes sense once an amount is settled.
+      expect(find.text('Choose a plan to see the payment details.'),
+          findsOneWidget);
+      expect(find.text('TBbwzuMH3nHdYMqft3vNtnvjRtGDVb7LVE'), findsNothing);
+    });
+
+    testWidgets('picking the master plan fills in its price and shows the QR',
+        (tester) async {
+      await pumpApp(tester, loggedIn: true, wallet: joining());
+      await openDeposit(tester);
+
+      await tester.tap(find.text('Master'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('TBbwzuMH3nHdYMqft3vNtnvjRtGDVb7LVE'), findsOneWidget);
+      final amount = tester.widget<TextField>(
+        find.descendant(
+          of: find.byKey(const Key('depositAmount')),
+          matching: find.byType(TextField),
+        ),
+      );
+      expect(amount.controller?.text, '5000');
+      // The price is the server's to decide, not the agent's to edit.
+      expect(amount.readOnly, isTrue);
+    });
+
+    testWidgets('the chosen plan is sent with the payment', (tester) async {
+      final wallet = joining();
+      await pumpApp(tester, loggedIn: true, wallet: wallet);
+      await openDeposit(tester);
+
+      await tester.tap(find.text('Master'));
+      await tester.pumpAndSettle();
       await tester.enterText(
         find.byKey(const Key('depositUtr')),
-        '428716503921',
+        'abc123def456',
       );
-      await submitDeposit(tester);
 
-      expect(find.textContaining('Minimum deposit is ₹270000.00'), findsOneWidget);
+      final button = find.text('I have paid');
+      await tester.ensureVisible(button);
+      await tester.pumpAndSettle();
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+
+      expect(wallet.lastDepositPlan, 'MASTER');
+      expect(wallet.lastDepositCurrency, 'USDT');
     });
   });
 

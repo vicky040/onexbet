@@ -26,5 +26,7 @@ abstract interface class WalletRepository {
     required double amount,
     required String utr,
     String currency = 'INR',
+    /// `AGENT` or `MASTER` when this deposit is buying a joining plan.
+    String? plan,
   });
 }

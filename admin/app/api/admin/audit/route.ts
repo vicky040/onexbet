@@ -1,5 +1,5 @@
 import type { Prisma } from "@prisma/client";
-import { requireAdmin } from "@/lib/auth";
+import { requireFullAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { ok, pageMeta, readPagination, withRoute } from "@/lib/http";
 import { adminAuditLog } from "@/lib/admin-serializers";
@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 /** `?action=`, `?entity=`, `?entityId=`, `?adminId=`. */
 export const GET = withRoute(async (request: Request) => {
-  await requireAdmin();
+  await requireFullAdmin();
   const url = new URL(request.url);
   const page = readPagination(url, { defaultPerPage: 50 });
 

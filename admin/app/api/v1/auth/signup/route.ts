@@ -24,6 +24,21 @@ export const POST = withRoute(async (request: Request) => {
     throw ApiError.conflict("An account with this mobile number already exists");
   }
 
+  // A referral code ties this agent to the master who brought them in. A
+  // wrong code is rejected rather than silently ignored — someone typing one
+  // in expects it to count.
+  let referredById: string | null = null;
+  if (body.referralCode) {
+    const master = await prisma.agent.findUnique({
+      where: { referralCode: body.referralCode.toUpperCase() },
+      select: { id: true, plan: true },
+    });
+    if (!master || master.plan !== "MASTER") {
+      throw ApiError.badRequest("That referral code is not valid");
+    }
+    referredById = master.id;
+  }
+
   const agent = await prisma.agent.create({
     data: {
       name: body.name,
@@ -31,6 +46,7 @@ export const POST = withRoute(async (request: Request) => {
       email: body.email,
       passwordHash: await hashPassword(body.password),
       status: settings.requireAgentApproval ? "PENDING" : "ACTIVE",
+      referredById,
       payinCommissionRate: settings.defaultPayinCommissionRate,
       payoutCommissionRate: settings.defaultPayoutCommissionRate,
     },

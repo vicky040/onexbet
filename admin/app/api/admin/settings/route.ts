@@ -1,4 +1,4 @@
-import { requireAdmin, requireSuperAdmin } from "@/lib/auth";
+import { requireFullAdmin, requireSuperAdmin } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { getSettings, prisma } from "@/lib/db";
 import { ok, readBody, withRoute } from "@/lib/http";
@@ -8,7 +8,7 @@ import { updateSettingsSchema } from "@/lib/validation";
 export const dynamic = "force-dynamic";
 
 export const GET = withRoute(async () => {
-  await requireAdmin();
+  await requireFullAdmin();
   return ok(adminSettings(await getSettings()));
 });
 

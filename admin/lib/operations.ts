@@ -5,6 +5,7 @@ import {
   depositReference,
   payinReference,
   payoutReference,
+  referralCode,
   withUniqueReference,
 } from "./ids";
 import { commissionOf, D, money, toNumber, type Numeric } from "./money";
@@ -111,6 +112,8 @@ export async function createDeposit(input: {
   amount: Numeric;
   currency?: "INR" | "USDT";
   usdtRate?: Numeric;
+  /** Set when this deposit buys a joining plan rather than topping up. */
+  plan?: "AGENT" | "MASTER";
   utr: string;
   proofUrl?: string | null;
   autoApprove?: boolean;
@@ -144,6 +147,7 @@ export async function createDeposit(input: {
             agentId: input.agentId,
             amount,
             currency,
+            plan: input.plan ?? null,
             amountUsdt: currency === "USDT" ? sent : null,
             usdtRate: currency === "USDT" ? D(input.usdtRate!) : null,
             previousBalance: agent.balance,
@@ -189,6 +193,25 @@ export async function approveDeposit(input: {
     }
 
     const change = await applyBalanceDelta(tx, existing.agentId, existing.amount);
+
+    // A joining deposit is what puts an agent on a plan. A master also gets
+    // the referral code they hand out, unless they already have one.
+    if (existing.plan === "AGENT" || existing.plan === "MASTER") {
+      const agent = await tx.agent.findUniqueOrThrow({
+        where: { id: existing.agentId },
+        select: { referralCode: true },
+      });
+
+      await tx.agent.update({
+        where: { id: existing.agentId },
+        data: {
+          plan: existing.plan,
+          ...(existing.plan === "MASTER" && !agent.referralCode
+            ? { referralCode: referralCode() }
+            : {}),
+        },
+      });
+    }
 
     const updated = await tx.deposit.update({
       where: { id: existing.id },

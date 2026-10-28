@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/auth";
+import { requireFullAdmin } from "@/lib/auth";
 import { ok, withRoute } from "@/lib/http";
 import { settlePayout } from "@/lib/operations";
 import { adminPayout } from "@/lib/admin-serializers";
@@ -12,7 +12,7 @@ type Params = { params: Promise<{ id: string }> };
  * their commission.
  */
 export const POST = withRoute(async (_request: Request, { params }: Params) => {
-  const admin = await requireAdmin();
+  const admin = await requireFullAdmin();
   const { id } = await params;
 
   const payout = await settlePayout({ payoutId: id, adminId: admin.id });

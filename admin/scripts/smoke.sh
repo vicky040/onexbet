@@ -89,44 +89,38 @@ check "deposits list" "4" "$(curl -s $BASE/api/v1/deposits -H "$AUTH" | node -e 
 check "notifications unread meta" "yes" "$(curl -s $BASE/api/v1/notifications -H "$AUTH" | j meta.unread | grep -qE '^[0-9]+$' && echo yes || echo no)"
 check "support messages" "yes" "$(curl -s $BASE/api/v1/support/messages -H "$AUTH" | j data.0.fromUser | grep -qE 'true|false' && echo yes || echo no)"
 
-echo "=== deposit currencies ==="
+echo "=== deposit options ==="
 CFG=$(curl -s $BASE/api/v1/deposits/config -H "$AUTH")
-MIN_INR=$(echo "$CFG" | j data.currencies.0.minimum)
-MIN_USDT=$(echo "$CFG" | j data.currencies.1.minimum)
+MIN_USDT=$(echo "$CFG" | j data.currencies.0.minimum)
 USDT_RATE=$(echo "$CFG" | j data.usdtInrRate)
-check "config offers INR then USDT" "INR USDT" \
-  "$(echo "$CFG" | j data.currencies.0.code) $(echo "$CFG" | j data.currencies.1.code)"
+check "USDT is the only currency while bank transfer is off" "USDT" \
+  "$(echo "$CFG" | j data.currencies.0.code)"
+check "bank transfer is absent from the list" "undefined" \
+  "$(echo "$CFG" | j data.currencies.1.code)"
+check "bank transfer reads as disabled" "false" "$(echo "$CFG" | j data.bankTransferEnabled)"
 check "USDT carries a deposit address" "yes" \
-  "$(echo "$CFG" | j data.currencies.1.address | grep -q '^T' && echo yes || echo no)"
-check "USDT carries a network" "yes" \
-  "$(echo "$CFG" | j data.currencies.1.network | grep -qi trc20 && echo yes || echo no)"
-check "both minimums are worth the same" "yes" \
-  "$(node -e "console.log(Math.abs($MIN_INR - $MIN_USDT * $USDT_RATE) < 0.01 ? 'yes' : 'no')")"
+  "$(echo "$CFG" | j data.currencies.0.address | grep -q "^T" && echo yes || echo no)"
+check "the agent plan costs 3000" "3000" "$(echo "$CFG" | j data.plans.0.priceUsdt)"
+check "the master plan costs 5000" "5000" "$(echo "$CFG" | j data.plans.1.priceUsdt)"
+check "the seeded agent has already joined" "true" "$(echo "$CFG" | j data.hasJoined)"
 
 echo "=== agent writes ==="
 NEWDEP=$(curl -s -X POST $BASE/api/v1/deposits -H "$AUTH" -H 'content-type: application/json' \
-  -d "{\"amount\":$MIN_INR,\"utr\":\"SMOKE${RUN}A\"}")
+  -d "{\"amount\":$MIN_USDT,\"currency\":\"USDT\",\"utr\":\"SMOKE${RUN}A\"}")
 DEPREF=$(echo "$NEWDEP" | j data.reference)
 check "create deposit is pending" "PENDING" "$(echo "$NEWDEP" | j data.status)"
-check "an INR deposit records its currency" "INR" "$(echo "$NEWDEP" | j data.currency)"
+check "a top-up records its currency" "USDT" "$(echo "$NEWDEP" | j data.currency)"
 check "duplicate UTR refused" "conflict" \
   "$(curl -s -X POST $BASE/api/v1/deposits -H "$AUTH" -H 'content-type: application/json' \
-     -d "{\"amount\":$MIN_INR,\"utr\":\"SMOKE${RUN}A\"}" | j error.code)"
-check "below minimum refused" "bad_request" \
+     -d "{\"amount\":$MIN_USDT,\"currency\":\"USDT\",\"utr\":\"SMOKE${RUN}A\"}" | j error.code)"
+check "a rupee deposit is refused while bank transfer is off" "bad_request" \
   "$(curl -s -X POST $BASE/api/v1/deposits -H "$AUTH" -H 'content-type: application/json' \
      -d '{"amount":5,"utr":"SMOKE'"$RUN"'B"}' | j error.code)"
 
-USDTDEP=$(curl -s -X POST $BASE/api/v1/deposits -H "$AUTH" -H 'content-type: application/json' \
-  -d "{\"amount\":$MIN_USDT,\"currency\":\"USDT\",\"utr\":\"SMOKEUSDT${RUN}\"}")
-check "a USDT deposit is accepted" "USDT" "$(echo "$USDTDEP" | j data.currency)"
-check "the server converts USDT to rupees" "yes" \
-  "$(node -e "console.log(Math.abs($(echo "$USDTDEP" | j data.amount) - $MIN_USDT * $USDT_RATE) < 0.01 ? 'yes' : 'no')")"
-check "the rate is recorded on the deposit" "yes" \
-  "$(node -e "console.log($(echo "$USDTDEP" | j data.usdtRate) === $USDT_RATE ? 'yes' : 'no')")"
-check "below the USDT minimum is refused in USDT" "yes" \
-  "$(curl -s -X POST $BASE/api/v1/deposits -H "$AUTH" -H 'content-type: application/json' \
-     -d "{\"amount\":1,\"currency\":\"USDT\",\"utr\":\"SMOKEUSDTLOW${RUN}\"}" \
-     | j error.message | grep -q USDT && echo yes || echo no)"
+check "the server records the USDT rate" "yes" \
+  "$(node -e "console.log($(echo "$NEWDEP" | j data.usdtRate) === $USDT_RATE ? 'yes' : 'no')")"
+check "it converts to rupees at that rate" "yes" \
+  "$(node -e "console.log(Math.abs($(echo "$NEWDEP" | j data.amount) - $MIN_USDT * $USDT_RATE) < 0.01 ? 'yes' : 'no')")"
 
 NEWBANK=$(curl -s -X POST $BASE/api/v1/banks -H "$AUTH" -H 'content-type: application/json' \
   -d '{"bankName":"Kotak","accountHolder":"Sam Tester","accountNumber":"9'"$RUN"'","ifsc":"KKBK0000123","upiId":"sam.kotak@okhdfcbank","limit":50000,"amountLimit":50000,"txnLimit":50000}')
@@ -189,7 +183,8 @@ check "admin login" "SUPER_ADMIN" \
      -d '{"email":"admin@onexbet.app","password":"admin12345"}' | j data.role)"
 
 echo "=== admin reads ==="
-check "dashboard agents total" "3" "$(curl -s -b "$JAR" $BASE/api/admin/dashboard | j data.overview.agents.total)"
+check "the dashboard counts every seeded agent" "yes" \
+  "$(node -e "console.log($(curl -s -b "$JAR" $BASE/api/admin/dashboard | j data.overview.agents.total) >= 4 ? 'yes' : 'no')")"
 check "agents list" "yes" "$(curl -s -b "$JAR" "$BASE/api/admin/agents?q=sam" | j data.0.name | grep -q 'Sam' && echo yes || echo no)"
 check "deposits pending meta" "yes" "$(curl -s -b "$JAR" "$BASE/api/admin/deposits?status=PENDING" | j meta.pendingCount | grep -qE '^[0-9]+$' && echo yes || echo no)"
 check "payins volume meta" "yes" "$(curl -s -b "$JAR" $BASE/api/admin/payins | j meta.volume | grep -qE '^[0-9.]+$' && echo yes || echo no)"
@@ -205,7 +200,7 @@ check "approve deposit" "COMPLETED" \
   "$(curl -s -b "$JAR" -X POST $BASE/api/admin/deposits/$DEPID/approve -H 'content-type: application/json' \
      -d '{"note":"smoke test"}' | j data.status)"
 BAL_AFTER=$(curl -s $BASE/api/v1/wallet/summary -H "$AUTH" | j data.totalBalance)
-check "balance grew by the deposit" "$(node -e "console.log(Number($MIN_INR).toFixed(2))")" \
+check "balance grew by the deposit" "$(node -e "console.log(($MIN_USDT * $USDT_RATE).toFixed(2))")" \
   "$(node -e "console.log(($BAL_AFTER - $BAL_BEFORE).toFixed(2))")"
 check "approving twice is refused" "conflict" \
   "$(curl -s -b "$JAR" -X POST $BASE/api/admin/deposits/$DEPID/approve | j error.code)"
@@ -317,6 +312,74 @@ PO_EXPECTED=$(node -e "
 check "settled payout re-credited the difference" "$PO_EXPECTED"   "$(node -e "console.log(($BAL2_POST - $BAL2_PRE).toFixed(2))")"
 
 check "the agent was told about the correction" "yes"   "$(curl -s $BASE/api/v1/notifications -H "$AUTH" | j data.0.title | grep -qiE 'corrected' && echo yes || echo no)"
+
+echo "=== joining plans (a brand new agent) ==="
+NEWMOBILE="9${RUN: -9}"
+SIGNUP=$(curl -s -X POST $BASE/api/v1/auth/signup -H 'content-type: application/json' \
+  -d "{\"name\":\"Plan Tester\",\"mobile\":\"$NEWMOBILE\",\"email\":\"plan$RUN@example.com\",\"password\":\"secret1\",\"referralCode\":\"MASTER01\"}")
+check "sign-up with a referral code works" "Plan Tester" "$(echo "$SIGNUP" | j data.user.name)"
+check "a new agent is on no plan yet" "NONE" "$(echo "$SIGNUP" | j data.user.plan)"
+NEWAUTH="authorization: Bearer $(echo "$SIGNUP" | j data.accessToken)"
+
+check "a bad referral code is rejected" "bad_request" \
+  "$(curl -s -X POST $BASE/api/v1/auth/signup -H 'content-type: application/json' \
+     -d "{\"name\":\"Nope\",\"mobile\":\"9${RUN: -8}1\",\"email\":\"nope$RUN@example.com\",\"password\":\"secret1\",\"referralCode\":\"NOTACODE\"}" | j error.code)"
+check "a deposit without a plan is refused" "bad_request" \
+  "$(curl -s -X POST $BASE/api/v1/deposits -H "$NEWAUTH" -H 'content-type: application/json' \
+     -d "{\"amount\":3000,\"currency\":\"USDT\",\"utr\":\"PLANA$RUN\"}" | j error.code)"
+check "the wrong amount for a plan is refused" "bad_request" \
+  "$(curl -s -X POST $BASE/api/v1/deposits -H "$NEWAUTH" -H 'content-type: application/json' \
+     -d "{\"amount\":4000,\"currency\":\"USDT\",\"plan\":\"AGENT\",\"utr\":\"PLANB$RUN\"}" | j error.code)"
+
+JOINDEP=$(curl -s -X POST $BASE/api/v1/deposits -H "$NEWAUTH" -H 'content-type: application/json' \
+  -d "{\"amount\":5000,\"currency\":\"USDT\",\"plan\":\"MASTER\",\"utr\":\"PLANC$RUN\"}")
+check "the master plan at the right price is accepted" "MASTER" "$(echo "$JOINDEP" | j data.plan)"
+check "the plan is not active until approved" "NONE" \
+  "$(curl -s $BASE/api/v1/auth/me -H "$NEWAUTH" | j data.user.plan)"
+
+JOINID=$(curl -s -b "$JAR" "$BASE/api/admin/deposits?q=PLANC$RUN" | j data.0.id)
+curl -s -b "$JAR" -X POST $BASE/api/admin/deposits/$JOINID/approve > /dev/null
+check "approving the joining deposit activates the plan" "MASTER" \
+  "$(curl -s $BASE/api/v1/auth/me -H "$NEWAUTH" | j data.user.plan)"
+check "a new master is given a referral code" "yes" \
+  "$(curl -s $BASE/api/v1/auth/me -H "$NEWAUTH" | j data.user.referralCode | grep -qE '^[A-Z0-9]{8}$' && echo yes || echo no)"
+check "afterwards a free-amount top-up is allowed" "USDT" \
+  "$(curl -s -X POST $BASE/api/v1/deposits -H "$NEWAUTH" -H 'content-type: application/json' \
+     -d "{\"amount\":3500,\"currency\":\"USDT\",\"utr\":\"PLAND$RUN\"}" | j data.currency)"
+
+echo "=== a master sees only their own agents ==="
+MJAR="$(mktemp -t onexbet-smoke-master.XXXXXX)"
+curl -s -c "$MJAR" -X POST $BASE/api/admin/auth/login -H 'content-type: application/json' \
+  -d '{"email":"master@onexbet.app","password":"secret1"}' > /dev/null
+check "the master can sign in to the panel" "MASTER_ADMIN" \
+  "$(curl -s -b "$MJAR" $BASE/api/admin/auth/me | j data.role)"
+MAGENTS=$(curl -s -b "$MJAR" $BASE/api/admin/agents)
+mnames() { echo "$MAGENTS" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).data.map(a=>a.name).join('|')))"; }
+check "their referred agent is listed" "yes" \
+  "$(mnames | grep -q 'Neha Iyer' && echo yes || echo no)"
+check "agents they did not refer are not" "yes" \
+  "$(mnames | tr '|' '\n' | grep -qx 'Sam Tester' && echo no || echo yes)"
+MLISTED=$(mnames | tr '|' '\n' | grep -c .)
+check "the dashboard counts the same agents as the list" "$MLISTED" \
+  "$(curl -s -b "$MJAR" $BASE/api/admin/dashboard | j data.overview.agents.total)"
+MAGENT=$(curl -s -b "$MJAR" $BASE/api/admin/agents | j data.0.id)
+check "they may set commission" "7.25" \
+  "$(curl -s -b "$MJAR" -X PATCH $BASE/api/admin/agents/$MAGENT -H 'content-type: application/json' \
+     -d '{"payinCommissionRate":7.25}' | j data.payinCommissionRate)"
+check "they may not block an agent" "forbidden" \
+  "$(curl -s -b "$MJAR" -X PATCH $BASE/api/admin/agents/$MAGENT -H 'content-type: application/json' \
+     -d '{"status":"BLOCKED"}' | j error.code)"
+check "they may not touch an agent outside their referrals" "not_found" \
+  "$(curl -s -b "$MJAR" -X PATCH $BASE/api/admin/agents/$AGENTID -H 'content-type: application/json' \
+     -d '{"payinCommissionRate":9}' | j error.code)"
+check "they cannot reach deposits" "forbidden" "$(curl -s -b "$MJAR" $BASE/api/admin/deposits | j error.code)"
+check "they cannot reach payouts" "forbidden" "$(curl -s -b "$MJAR" $BASE/api/admin/payouts | j error.code)"
+check "they cannot reach payins" "forbidden" "$(curl -s -b "$MJAR" $BASE/api/admin/payins | j error.code)"
+check "they cannot reach settings" "forbidden" "$(curl -s -b "$MJAR" $BASE/api/admin/settings | j error.code)"
+check "they cannot adjust a balance" "forbidden" \
+  "$(curl -s -b "$MJAR" -X POST $BASE/api/admin/agents/$MAGENT/balance -H 'content-type: application/json' \
+     -d '{"amount":10,"reason":"nope"}' | j error.code)"
+rm -f "$MJAR"
 
 echo "=== admin panel pages render ==="
 for path in / /agents /deposits /payouts /payins /banks /notifications /support /admins /settings /audit; do

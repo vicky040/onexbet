@@ -46,6 +46,8 @@ abstract interface class AuthRepository {
     required String mobile,
     required String email,
     required String password,
+    /// A master's code, when the agent was referred by one.
+    String? referralCode,
   });
 
   /// Starts a reset: the server texts a code to [mobile]. Answers the same

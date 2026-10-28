@@ -90,6 +90,17 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
+  // A master only has the dashboard and their own agents. The session token
+  // carries the role, so this costs nothing and keeps them off pages that
+  // would otherwise render platform-wide data before the API refused it.
+  if (session?.role === "MASTER_ADMIN") {
+    const path = request.nextUrl.pathname;
+    const allowed = path === "/" || path === "/agents" || path.startsWith("/agents/");
+    if (!allowed) {
+      return NextResponse.redirect(new URL("/", request.url));
+    }
+  }
+
   return NextResponse.next();
 }
 

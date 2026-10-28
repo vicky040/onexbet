@@ -44,6 +44,9 @@ export function adminAgent(agent: Agent & { _count?: Record<string, number> }) {
     mobile: agent.mobile,
     email: agent.email,
     status: agent.status,
+    plan: agent.plan,
+    referralCode: agent.referralCode,
+    referredById: agent.referredById,
     balance: toNumber(agent.balance),
     securityDepositUsdt: toNumber(agent.securityDepositUsdt),
     payinCommissionRate: toNumber(agent.payinCommissionRate),
@@ -70,6 +73,7 @@ export function adminDeposit(deposit: WithAgent<Deposit>) {
     afterBalance: deposit.afterBalance === null ? null : toNumber(deposit.afterBalance),
     status: deposit.status,
     statusLabel: STATUS_LABELS[deposit.status],
+    plan: deposit.plan,
     utr: deposit.utr,
     proofUrl: deposit.proofUrl,
     reviewNote: deposit.reviewNote,
@@ -160,12 +164,18 @@ export function adminProfile(admin: Admin) {
 }
 
 /** A panel user, for the Admins screen. */
-export function adminUser(admin: Admin) {
+export function adminUser(
+  admin: Admin & { agent?: { id: string; name: string; mobile: string } | null },
+) {
   return {
     id: admin.id,
     name: admin.name,
     email: admin.email,
     role: admin.role,
+    agentId: admin.agentId,
+    agent: admin.agent
+      ? { id: admin.agent.id, name: admin.agent.name, mobile: admin.agent.mobile }
+      : null,
     isActive: admin.isActive,
     lastLoginAt: iso(admin.lastLoginAt),
     createdAt: iso(admin.createdAt),
@@ -177,6 +187,9 @@ export function adminSettings(settings: Settings) {
     defaultPayinCommissionRate: toNumber(settings.defaultPayinCommissionRate),
     defaultPayoutCommissionRate: toNumber(settings.defaultPayoutCommissionRate),
     minDepositUsdt: toNumber(settings.minDepositUsdt),
+    agentPlanUsdt: toNumber(settings.agentPlanUsdt),
+    masterPlanUsdt: toNumber(settings.masterPlanUsdt),
+    bankTransferEnabled: settings.bankTransferEnabled,
     usdtInrRate: toNumber(settings.usdtInrRate),
     /// What the USDT minimum is worth in rupees, which is the INR minimum.
     minDepositInr: toNumber(

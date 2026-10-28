@@ -19,8 +19,8 @@ import {
   Pagination,
   StatusBadge,
 } from "@/components/ui";
-import { isSuperAdmin } from "@/lib/auth";
 import { getSettings, prisma } from "@/lib/db";
+import { adminScope, scopedAgentWhere } from "@/lib/scope";
 import { formatPercent } from "@/lib/money";
 
 export const metadata = { title: "Agents · 1XBET Agent Admin" };
@@ -42,9 +42,12 @@ export default async function AgentsPage({
   const page = Math.max(1, Number(params.page ?? 1) || 1);
   const status = params.status?.toUpperCase();
   const q = params.q?.trim();
-  const superAdmin = await isSuperAdmin();
+  const scope = await adminScope();
+  const superAdmin = scope.admin.role === "SUPER_ADMIN";
+  const canAddAgents = superAdmin || scope.isMaster;
 
   const where: Prisma.AgentWhereInput = {
+    ...scopedAgentWhere(scope),
     ...(status && ["PENDING", "ACTIVE", "BLOCKED"].includes(status)
       ? { status: status as Prisma.AgentWhereInput["status"] }
       : {}),
@@ -123,12 +126,18 @@ export default async function AgentsPage({
     <>
       <PageHeader
         title="Agents"
-        subtitle="Everyone who can sign in to the mobile app."
+        subtitle={
+          scope.isMaster
+            ? "The agents you referred. You can set their commission rates."
+            : "Everyone who can sign in to the mobile app."
+        }
       />
 
-      {superAdmin ? (
+      {canAddAgents ? (
         <div className="mb-6">
-          <Disclosure summary="Add an agent">
+          <Disclosure
+            summary={scope.isMaster ? "Add an agent under you" : "Add an agent"}
+          >
             <ActionForm
               action={createAgentAction}
               resetOnSuccess

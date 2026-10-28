@@ -188,9 +188,18 @@ export async function agentEarnings(
 // Admin dashboard
 // ---------------------------------------------------------------------------
 
-export async function platformOverview() {
+/**
+ * Platform-wide figures, or — for a master — the figures for just the agents
+ * they referred. Passing a list narrows every count and sum to that set.
+ */
+export async function platformOverview(agentIds: string[] | null = null) {
   const since = new Date();
   since.setUTCHours(0, 0, 0, 0);
+
+  // An empty list means "a master with no agents yet", which must read as
+  // nothing rather than everything.
+  const forAgents = agentIds === null ? {} : { agentId: { in: agentIds } };
+  const agentsOnly = agentIds === null ? {} : { id: { in: agentIds } };
 
   const [
     agentCounts,
@@ -202,31 +211,37 @@ export async function platformOverview() {
     unreadSupport,
     settledPayouts,
   ] = await Promise.all([
-    prisma.agent.groupBy({ by: ["status"], _count: { _all: true } }),
-    prisma.agent.aggregate({ _sum: { balance: true } }),
+    prisma.agent.groupBy({
+      by: ["status"],
+      where: agentsOnly,
+      _count: { _all: true },
+    }),
+    prisma.agent.aggregate({ where: agentsOnly, _sum: { balance: true } }),
     prisma.deposit.aggregate({
-      where: { status: "PENDING" },
+      where: { status: "PENDING", ...forAgents },
       _count: { _all: true },
       _sum: { amount: true },
     }),
     prisma.payout.aggregate({
-      where: { status: "OPEN" },
+      where: { status: "OPEN", ...forAgents },
       _count: { _all: true },
       _sum: { amount: true },
     }),
     prisma.payin.aggregate({
-      where: { status: "COMPLETED", createdAt: { gte: since } },
+      where: { status: "COMPLETED", createdAt: { gte: since }, ...forAgents },
       _count: { _all: true },
       _sum: { amount: true, commission: true },
     }),
     prisma.payin.aggregate({
-      where: { status: "COMPLETED" },
+      where: { status: "COMPLETED", ...forAgents },
       _sum: { amount: true, commission: true },
     }),
-    prisma.supportMessage.count({ where: { fromAgent: true, readByAdmin: false } }),
+    prisma.supportMessage.count({
+      where: { fromAgent: true, readByAdmin: false, ...forAgents },
+    }),
     prisma.payout.groupBy({
       by: ["status"],
-      where: { status: { not: "OPEN" } },
+      where: { status: { not: "OPEN" }, ...forAgents },
       _count: { _all: true },
       _sum: { amount: true, commission: true },
     }),

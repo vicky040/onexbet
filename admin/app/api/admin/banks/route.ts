@@ -1,5 +1,5 @@
 import type { Prisma } from "@prisma/client";
-import { requireAdmin } from "@/lib/auth";
+import { requireFullAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { ok, pageMeta, readPagination, withRoute } from "@/lib/http";
 import { adminBankAccount } from "@/lib/admin-serializers";
@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 /** Every agent's bank account. `?agentId=`, `?active=true|false`, `?q=`. */
 export const GET = withRoute(async (request: Request) => {
-  await requireAdmin();
+  await requireFullAdmin();
   const url = new URL(request.url);
   const page = readPagination(url);
 

@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/auth";
+import { requireFullAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { ok, withRoute } from "@/lib/http";
 
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
  * come first.
  */
 export const GET = withRoute(async () => {
-  await requireAdmin();
+  await requireFullAdmin();
 
   const [threads, unreadCounts] = await Promise.all([
     prisma.supportMessage.groupBy({

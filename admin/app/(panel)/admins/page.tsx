@@ -1,4 +1,4 @@
-import type { Admin } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { createAdminAction, updateAdminAction } from "@/app/actions";
 import { DataTable, type Column } from "@/components/data-table";
 import {
@@ -39,15 +39,28 @@ export default async function AdminsPage() {
     );
   }
 
-  const admins = await prisma.admin.findMany({
-    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-  });
+  const [admins, masterAgents] = await Promise.all([
+    prisma.admin.findMany({
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      include: { agent: { select: { id: true, name: true, mobile: true } } },
+    }),
+    // Agents on the Master plan who do not have a panel account yet.
+    prisma.agent.findMany({
+      where: { plan: "MASTER", panelAccount: { is: null } },
+      select: { id: true, name: true, mobile: true },
+      orderBy: { name: "asc" },
+    }),
+  ]);
 
   const superAdmins = admins.filter(
     (admin) => admin.role === "SUPER_ADMIN" && admin.isActive,
   ).length;
 
-  const columns: Column<Admin>[] = [
+  type PanelUser = Prisma.AdminGetPayload<{
+    include: { agent: { select: { id: true; name: true; mobile: true } } };
+  }>;
+
+  const columns: Column<PanelUser>[] = [
     {
       header: "User",
       primary: true,
@@ -68,6 +81,15 @@ export default async function AdminsPage() {
       cell: (admin) =>
         admin.role === "SUPER_ADMIN" ? (
           <Badge tone="info">Super admin</Badge>
+        ) : admin.role === "MASTER_ADMIN" ? (
+          <div>
+            <Badge tone="warning">Master</Badge>
+            {admin.agent ? (
+              <span className="mt-1 block text-xs text-muted">
+                {admin.agent.name}
+              </span>
+            ) : null}
+          </div>
         ) : (
           <Badge>Operator</Badge>
         ),
@@ -100,7 +122,7 @@ export default async function AdminsPage() {
 
         return (
           <>
-            {admin.role === "OPERATOR" ? (
+            {admin.role === "MASTER_ADMIN" ? null : admin.role === "OPERATOR" ? (
               <ActionForm action={updateAdminAction} hideMessage>
                 <input type="hidden" name="adminId" value={admin.id} />
                 <input type="hidden" name="role" value="SUPER_ADMIN" />
@@ -203,6 +225,21 @@ export default async function AdminsPage() {
                 <option value="SUPER_ADMIN">
                   Super admin — everything, including corrections
                 </option>
+                <option value="MASTER_ADMIN">
+                  Master — their own referred agents only
+                </option>
+              </Select>
+              <Select label="Master's agent" name="agentId" defaultValue="">
+                <option value="">
+                  {masterAgents.length === 0
+                    ? "No agents on the Master plan yet"
+                    : "Only needed for a Master account"}
+                </option>
+                {masterAgents.map((agent) => (
+                  <option key={agent.id} value={agent.id}>
+                    {agent.name} (+91 {agent.mobile})
+                  </option>
+                ))}
               </Select>
             </div>
             <SubmitButton>Create user</SubmitButton>
@@ -212,7 +249,7 @@ export default async function AdminsPage() {
 
       <Card
         title="Users"
-        description="An operator can review deposits, create and settle payouts, record payins, send notifications and answer support. A super admin can additionally change agent data and commission rates, correct payins and payouts, adjust balances, edit settings and manage these users."
+        description="An operator can review deposits, create and settle payouts, record payins, send notifications and answer support. A super admin can additionally change agent data and commission rates, correct payins and payouts, adjust balances, edit settings and manage these users. A master sees only the agents they referred, and may change nothing about them but their commission rates."
         bodyClassName="p-5"
       >
         <DataTable

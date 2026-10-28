@@ -149,6 +149,23 @@ export async function requireAdmin(): Promise<Admin> {
   return admin;
 }
 
+/**
+ * Any admin with run of the whole platform — a super admin or an operator.
+ *
+ * A MASTER_ADMIN is an agent with a narrow window onto their own referrals,
+ * so everything outside the dashboard and the agents list has to turn them
+ * away rather than quietly serving platform-wide data.
+ */
+export async function requireFullAdmin(): Promise<Admin> {
+  const admin = await requireAdmin();
+  if (admin.role === "MASTER_ADMIN") {
+    throw ApiError.forbidden(
+      "Master accounts can only use the dashboard and their own agents",
+    );
+  }
+  return admin;
+}
+
 /** For pages that show super-admin-only controls. */
 export async function isSuperAdmin(): Promise<boolean> {
   return (await getAdmin())?.role === "SUPER_ADMIN";

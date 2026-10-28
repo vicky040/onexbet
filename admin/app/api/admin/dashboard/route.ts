@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/auth";
+import { adminScope, scopedByAgentId } from "@/lib/scope";
 import { prisma } from "@/lib/db";
 import { ok, withRoute } from "@/lib/http";
 import { adminDeposit, adminPayout } from "@/lib/admin-serializers";
@@ -12,18 +12,19 @@ const agentSelect = {
 
 /** Everything the dashboard screen needs, in one call. */
 export const GET = withRoute(async () => {
-  await requireAdmin();
+  const scope = await adminScope();
+  const forAgents = scopedByAgentId(scope);
 
   const [overview, pendingDeposits, reportedPayouts] = await Promise.all([
-    platformOverview(),
+    platformOverview(scope.agentIds),
     prisma.deposit.findMany({
-      where: { status: "PENDING" },
+      where: { status: "PENDING", ...forAgents },
       include: { agent: agentSelect },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       take: 8,
     }),
     prisma.payout.findMany({
-      where: { status: "PAYMENT_RECEIVED" },
+      where: { status: "PAYMENT_RECEIVED", ...forAgents },
       include: { agent: agentSelect },
       orderBy: [{ paidAt: "asc" }, { id: "asc" }],
       take: 8,

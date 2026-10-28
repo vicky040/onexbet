@@ -4,11 +4,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
   clearAdminCookie,
-  requireAdmin,
+  requireFullAdmin,
   requireSuperAdmin,
   revokeAllRefreshTokens,
   setAdminCookie,
 } from "@/lib/auth";
+import { adminScope, assertAgentInScope } from "@/lib/scope";
 import { writeAudit } from "@/lib/audit";
 import { getSettings, prisma } from "@/lib/db";
 import { ApiError } from "@/lib/errors";
@@ -147,7 +148,7 @@ export async function approveDepositAction(
   form: FormData,
 ): Promise<ActionState> {
   return run(async () => {
-    const admin = await requireAdmin();
+    const admin = await requireFullAdmin();
     const depositId = str(form, "depositId");
     if (!depositId) throw ApiError.badRequest("Missing deposit");
 
@@ -165,7 +166,7 @@ export async function rejectDepositAction(
   form: FormData,
 ): Promise<ActionState> {
   return run(async () => {
-    const admin = await requireAdmin();
+    const admin = await requireFullAdmin();
     const depositId = str(form, "depositId");
     if (!depositId) throw ApiError.badRequest("Missing deposit");
 
@@ -187,7 +188,7 @@ export async function createPayoutAction(
   form: FormData,
 ): Promise<ActionState> {
   return run(async () => {
-    const admin = await requireAdmin();
+    const admin = await requireFullAdmin();
     const body = createPayoutSchema.parse({
       amount: form.get("amount"),
       upiId: form.get("upiId"),
@@ -206,7 +207,7 @@ export async function settlePayoutAction(
   form: FormData,
 ): Promise<ActionState> {
   return run(async () => {
-    const admin = await requireAdmin();
+    const admin = await requireFullAdmin();
     const payoutId = str(form, "payoutId");
     if (!payoutId) throw ApiError.badRequest("Missing payout");
 
@@ -220,7 +221,7 @@ export async function failPayoutAction(
   form: FormData,
 ): Promise<ActionState> {
   return run(async () => {
-    const admin = await requireAdmin();
+    const admin = await requireFullAdmin();
     const payoutId = str(form, "payoutId");
     if (!payoutId) throw ApiError.badRequest("Missing payout");
 
@@ -238,7 +239,7 @@ export async function releasePayoutAction(
   form: FormData,
 ): Promise<ActionState> {
   return run(async () => {
-    const admin = await requireAdmin();
+    const admin = await requireFullAdmin();
     const payoutId = str(form, "payoutId");
     if (!payoutId) throw ApiError.badRequest("Missing payout");
 
@@ -275,7 +276,7 @@ export async function createPayinAction(
   form: FormData,
 ): Promise<ActionState> {
   return run(async () => {
-    const admin = await requireAdmin();
+    const admin = await requireFullAdmin();
     const body = createPayinSchema.parse({
       agentId: form.get("agentId"),
       amount: form.get("amount"),
@@ -298,7 +299,11 @@ export async function createAgentAction(
   form: FormData,
 ): Promise<ActionState> {
   return run(async () => {
-    const admin = await requireSuperAdmin();
+    const scope = await adminScope();
+    if (!scope.isMaster && scope.admin.role !== "SUPER_ADMIN") {
+      throw ApiError.forbidden("Only a super admin can create agents");
+    }
+    const admin = scope.admin;
     const settings = await getSettings();
     const body = createAgentSchema.parse({
       name: form.get("name"),
@@ -331,8 +336,10 @@ export async function createAgentAction(
           body.payinCommissionRate ?? settings.defaultPayinCommissionRate,
         payoutCommissionRate:
           body.payoutCommissionRate ?? settings.defaultPayoutCommissionRate,
-        securityDepositUsdt: body.securityDepositUsdt ?? 0,
-        notes: body.notes,
+        securityDepositUsdt: scope.isMaster ? 0 : (body.securityDepositUsdt ?? 0),
+        notes: scope.isMaster ? null : body.notes,
+        // A master's agents are referred by that master.
+        referredById: scope.isMaster ? scope.admin.agentId : null,
       },
     });
 
@@ -361,7 +368,11 @@ export async function updateAgentAction(
   form: FormData,
 ): Promise<ActionState> {
   return run(async () => {
-    const admin = await requireSuperAdmin();
+    const scope = await adminScope();
+    if (!scope.isMaster && scope.admin.role !== "SUPER_ADMIN") {
+      throw ApiError.forbidden("Only a super admin can change agent details");
+    }
+    const admin = scope.admin;
     const agentId = str(form, "agentId");
     if (!agentId) throw ApiError.badRequest("Missing agent");
 
@@ -376,8 +387,31 @@ export async function updateAgentAction(
       password: str(form, "password"),
     });
 
+    if (scope.isMaster) assertAgentInScope(scope, agentId);
+
     const existing = await prisma.agent.findUnique({ where: { id: agentId } });
     if (!existing) throw ApiError.notFound("Agent");
+
+    if (scope.isMaster) {
+      const agent = await prisma.agent.update({
+        where: { id: agentId },
+        data: {
+          payinCommissionRate: body.payinCommissionRate,
+          payoutCommissionRate: body.payoutCommissionRate,
+        },
+      });
+
+      await writeAudit({
+        adminId: admin.id,
+        action: "agent.update",
+        entity: "Agent",
+        entityId: agentId,
+        summary: `Master updated commission for ${agent.name}`,
+        meta: { byMaster: true },
+      });
+
+      return "Commission updated";
+    }
 
     const agent = await prisma.agent.update({
       where: { id: agentId },
@@ -453,7 +487,7 @@ export async function sendNotificationAction(
   form: FormData,
 ): Promise<ActionState> {
   return run(async () => {
-    const admin = await requireAdmin();
+    const admin = await requireFullAdmin();
     const broadcast = bool(form, "broadcast");
     const body = sendNotificationSchema.parse({
       title: form.get("title"),
@@ -479,7 +513,7 @@ export async function replySupportAction(
   form: FormData,
 ): Promise<ActionState> {
   return run(async () => {
-    const admin = await requireAdmin();
+    const admin = await requireFullAdmin();
     const agentId = str(form, "agentId");
     if (!agentId) throw ApiError.badRequest("Missing agent");
 
@@ -515,6 +549,9 @@ export async function updateSettingsAction(
       defaultPayinCommissionRate: str(form, "defaultPayinCommissionRate"),
       defaultPayoutCommissionRate: str(form, "defaultPayoutCommissionRate"),
       minDepositUsdt: str(form, "minDepositUsdt"),
+      agentPlanUsdt: str(form, "agentPlanUsdt"),
+      masterPlanUsdt: str(form, "masterPlanUsdt"),
+      bankTransferEnabled: bool(form, "bankTransferEnabled"),
       usdtInrRate: str(form, "usdtInrRate"),
       usdtDepositAddress: str(form, "usdtDepositAddress"),
       usdtNetwork: str(form, "usdtNetwork"),
@@ -596,6 +633,7 @@ export async function createAdminAction(
       email: form.get("email"),
       password: form.get("password"),
       role: str(form, "role"),
+      agentId: str(form, "agentId"),
     });
     const email = body.email.toLowerCase();
 
@@ -607,12 +645,31 @@ export async function createAdminAction(
       throw ApiError.conflict("An admin with this email already exists");
     }
 
+    // A master account is only meaningful attached to an agent on the
+    // Master plan: that link is how we know whose referrals they manage.
+    if (body.role === "MASTER_ADMIN") {
+      const agent = await prisma.agent.findUnique({
+        where: { id: body.agentId },
+        select: { plan: true, panelAccount: { select: { id: true } } },
+      });
+      if (!agent) throw ApiError.notFound("Agent");
+      if (agent.plan !== "MASTER") {
+        throw ApiError.badRequest(
+          "That agent is not on the Master plan yet. Approve their Master deposit first.",
+        );
+      }
+      if (agent.panelAccount) {
+        throw ApiError.conflict("That agent already has a panel account");
+      }
+    }
+
     const created = await prisma.admin.create({
       data: {
         name: body.name,
         email,
         passwordHash: await hashPassword(body.password),
         role: body.role ?? "OPERATOR",
+        agentId: body.role === "MASTER_ADMIN" ? body.agentId : null,
       },
     });
 

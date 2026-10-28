@@ -99,12 +99,14 @@ class HttpAuthRepository implements AuthRepository {
     required String mobile,
     required String email,
     required String password,
+    String? referralCode,
   }) =>
       _guard(() async {
         final data = asObject(
           await _api.post(
             '/auth/signup',
             body: {
+              'referralCode': ?referralCode,
               'name': name,
               'mobile': mobile,
               'email': email,

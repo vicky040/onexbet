@@ -47,13 +47,18 @@ class FakeAuthRepository implements AuthRepository {
     return _current = testUser;
   }
 
+  /// What the sign-up screen passed through, for the referral test.
+  String? lastSignupReferralCode;
+
   @override
   Future<SignupResult> signup({
     required String name,
     required String mobile,
     required String email,
     required String password,
+    String? referralCode,
   }) async {
+    lastSignupReferralCode = referralCode;
     final user = User(name: name, mobile: mobile, email: email);
     _current = user;
     return SignupResult(user: user, pendingApproval: false);
@@ -179,18 +184,48 @@ class FakeWalletRepository implements WalletRepository {
   /// Mirrors the server: 3000 USDT, and the same worth in rupees.
   static const usdtRate = 90.0;
 
+  /// Flipped by tests that need the rupee option back.
+  bool bankTransferEnabled = false;
+
+  /// Flipped by tests covering an agent who has not bought a plan yet.
+  bool hasJoined = true;
+
+  String? lastDepositPlan;
+
   @override
-  Future<DepositConfig> depositConfig() async => const DepositConfig(
+  Future<DepositConfig> depositConfig() async => DepositConfig(
         usdtInrRate: usdtRate,
+        hasJoined: hasJoined,
+        bankTransferEnabled: bankTransferEnabled,
+        referralCode: hasJoined ? 'MASTER01' : null,
+        plans: hasJoined
+            ? const []
+            : const [
+                JoiningPlan(
+                  code: 'AGENT',
+                  label: 'Agent',
+                  description: 'Start taking payins and payouts.',
+                  priceUsdt: 3000,
+                  priceInr: 3000 * usdtRate,
+                ),
+                JoiningPlan(
+                  code: 'MASTER',
+                  label: 'Master',
+                  description: 'Everything an agent has, plus your own panel.',
+                  priceUsdt: 5000,
+                  priceInr: 5000 * usdtRate,
+                ),
+              ],
         currencies: [
-          DepositCurrencyOption(
-            code: 'INR',
-            label: 'Bank transfer',
-            symbol: '₹',
-            minimum: 3000 * usdtRate,
-            referenceLabel: 'UTR / Reference number',
-          ),
-          DepositCurrencyOption(
+          if (bankTransferEnabled)
+            const DepositCurrencyOption(
+              code: 'INR',
+              label: 'Bank transfer',
+              symbol: '₹',
+              minimum: 3000 * usdtRate,
+              referenceLabel: 'UTR / Reference number',
+            ),
+          const DepositCurrencyOption(
             code: 'USDT',
             label: 'USDT',
             symbol: 'USDT',
@@ -207,8 +242,10 @@ class FakeWalletRepository implements WalletRepository {
     required double amount,
     required String utr,
     String currency = 'INR',
+    String? plan,
   }) async {
     lastDepositCurrency = currency;
+    lastDepositPlan = plan;
     final inr = currency == 'USDT' ? amount * usdtRate : amount;
     return DepositRecord(
       id: 'TXNNEW000001',
