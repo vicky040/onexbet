@@ -2,17 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../core/theme/app_colors.dart';
-import '../../../core/utils/formatters.dart';
-import '../../../core/widgets/brand_logo.dart';
-import '../../../data/models/app_content.dart';
-import '../../../data/providers.dart';
+import '../../data/models/app_content.dart';
+import '../../data/providers.dart';
+import '../theme/app_colors.dart';
+import '../utils/formatters.dart';
+import 'brand_logo.dart';
 
 /// Shows the welcome dialog once per launch, on whichever screen mounts it.
 ///
-/// Both the dialog and the promotion are written by an admin and read from
-/// the server without a token, because this is the sign-in screen — there is
-/// nobody signed in yet.
+/// It runs after sign-in, because what it asks for — funding the float —
+/// is something only a signed-in agent can act on. It also stops appearing
+/// once the balance covers the joining minimum, so a working agent is not
+/// told to join every time they open the app.
+///
+/// The copy itself is written by an admin and can be switched off.
 mixin StartupNoticeOpener<T extends ConsumerStatefulWidget>
     on ConsumerState<T> {
   @override
@@ -35,6 +38,13 @@ mixin StartupNoticeOpener<T extends ConsumerStatefulWidget>
 
     if (!mounted || !content.welcome.enabled) return;
     if (ref.read(startupNoticeSeenProvider)) return;
+
+    // Nothing to say to an agent who has already funded their float.
+    final balance = ref.read(summaryProvider).value?.totalBalance;
+    if (balance != null && balance >= content.welcome.joiningMinimumInr) {
+      ref.read(startupNoticeSeenProvider.notifier).markSeen();
+      return;
+    }
 
     ref.read(startupNoticeSeenProvider.notifier).markSeen();
     await showDialog<void>(
@@ -156,7 +166,7 @@ class WelcomeDialog extends StatelessWidget {
   }
 }
 
-/// The dismissible promotion above the sign-in form.
+/// The dismissible promotion on the Home screen.
 class PromoBanner extends StatefulWidget {
   const PromoBanner({super.key, required this.promo});
 
@@ -184,8 +194,10 @@ class _PromoBannerState extends State<PromoBanner> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 18),
       child: Material(
-        color: AppColors.white.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(20),
+        // Home is a light surface, unlike the navy sign-in screen.
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(22),
+        clipBehavior: Clip.antiAlias,
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
           onTap: widget.promo.hasLink ? _open : null,
@@ -197,7 +209,7 @@ class _PromoBannerState extends State<PromoBanner> {
                   if (widget.promo.hasImage)
                     ClipRRect(
                       borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(20),
+                        top: Radius.circular(22),
                       ),
                       child: Image.network(
                         widget.promo.imageUrl,
@@ -214,7 +226,7 @@ class _PromoBannerState extends State<PromoBanner> {
                                     child: Center(
                                       child: CircularProgressIndicator(
                                         strokeWidth: 2,
-                                        color: AppColors.white,
+                                        color: AppColors.primaryBlue,
                                       ),
                                     ),
                                   ),
@@ -222,15 +234,32 @@ class _PromoBannerState extends State<PromoBanner> {
                     ),
                   if (widget.promo.headline.isNotEmpty)
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 44, 12),
-                      child: Text(
-                        widget.promo.headline,
-                        style: TextStyle(
-                          color: AppColors.white.withValues(alpha: 0.9),
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.w600,
-                          height: 1.35,
-                        ),
+                      padding: const EdgeInsets.fromLTRB(16, 14, 48, 14),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.campaign_rounded,
+                            color: AppColors.primaryBlue,
+                            size: 24,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              widget.promo.headline,
+                              style: const TextStyle(
+                                color: AppColors.navy,
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w700,
+                                height: 1.35,
+                              ),
+                            ),
+                          ),
+                          if (widget.promo.hasLink)
+                            const Icon(
+                              Icons.chevron_right_rounded,
+                              color: AppColors.textMuted,
+                            ),
+                        ],
                       ),
                     ),
                 ],
@@ -241,11 +270,11 @@ class _PromoBannerState extends State<PromoBanner> {
                 child: IconButton(
                   key: const Key('closePromo'),
                   tooltip: 'Close',
-                  iconSize: 20,
-                  color: AppColors.white,
+                  iconSize: 18,
+                  color: AppColors.textMuted,
                   style: IconButton.styleFrom(
-                    backgroundColor: Colors.black.withValues(alpha: 0.35),
-                    minimumSize: const Size(32, 32),
+                    backgroundColor: AppColors.pillBg,
+                    minimumSize: const Size(30, 30),
                     padding: EdgeInsets.zero,
                   ),
                   icon: const Icon(Icons.close_rounded),

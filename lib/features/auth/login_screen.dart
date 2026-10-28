@@ -6,10 +6,8 @@ import '../../core/router/routes.dart';
 import '../../core/widgets/buttons.dart';
 import '../../core/widgets/form_fields.dart';
 import '../../data/repositories/auth_repository.dart';
-import '../../data/providers.dart';
 import 'auth_controller.dart';
 import 'widgets/auth_scaffold.dart';
-import 'widgets/startup_notice.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -18,8 +16,7 @@ class LoginScreen extends ConsumerStatefulWidget {
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends ConsumerState<LoginScreen>
-    with StartupNoticeOpener {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _mobile = TextEditingController();
   final _password = TextEditingController();
@@ -56,10 +53,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         action: 'Sign up',
         onTap: () => context.go(Routes.signup),
       ),
-      banner: ref.watch(appContentProvider).maybeWhen(
-            data: (content) => PromoBanner(promo: content.promo),
-            orElse: () => null,
-          ),
       child: AutofillGroup(
         child: Form(
           key: _formKey,

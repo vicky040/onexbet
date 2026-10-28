@@ -97,16 +97,19 @@ class FakeAuthRepository implements AuthRepository {
 }
 
 class FakeWalletRepository implements WalletRepository {
-  FakeWalletRepository({this.openPayoutList = const []});
+  FakeWalletRepository({this.openPayoutList = const [], this.balance = 140474.93});
 
   final List<OpenPayout> openPayoutList;
+
+  /// Drives the welcome dialog, which only appears below the joining minimum.
+  final double balance;
 
   /// What the last createDeposit call was told to use.
   String? lastDepositCurrency;
 
   @override
-  Future<DashboardSummary> summary() async => const DashboardSummary(
-        totalBalance: 140474.93,
+  Future<DashboardSummary> summary() async => DashboardSummary(
+        totalBalance: balance,
         successRate: 24,
         securityDepositUsdt: 1000,
         payinCommission: 403922.93,

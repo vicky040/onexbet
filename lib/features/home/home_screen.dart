@@ -4,16 +4,26 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/responsive.dart';
+import '../../core/widgets/startup_notice.dart';
 import '../../data/providers.dart';
 import 'home_widgets.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
+  @override
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+/// [StartupNoticeOpener] shows the welcome dialog here rather than on the
+/// sign-in screen: funding the float is something only a signed-in agent
+/// can act on.
+class _HomeScreenState extends ConsumerState<HomeScreen>
+    with StartupNoticeOpener {
   static const _maxWidth = 760.0;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     Future<void> refresh() async {
       ref.invalidate(summaryProvider);
       ref.invalidate(earningsProvider);
@@ -43,6 +53,7 @@ class HomeScreen extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         SizedBox(height: 18),
+                        _Promo(),
                         AddDepositButton(),
                         SizedBox(height: 18),
                         CommissionTiles(),
@@ -60,5 +71,20 @@ class HomeScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+
+/// The promotion, when an admin has one switched on.
+class _Promo extends ConsumerWidget {
+  const _Promo();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final content = ref.watch(appContentProvider).value;
+    if (content == null || !content.promo.isVisible) {
+      return const SizedBox.shrink();
+    }
+    return PromoBanner(promo: content.promo);
   }
 }

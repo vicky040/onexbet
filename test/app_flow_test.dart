@@ -267,16 +267,29 @@ void main() {
   });
 
   group('startup notices', () {
-    testWidgets('the welcome dialog explains the joining requirement',
+    testWidgets('the welcome dialog does not appear before signing in',
         (tester) async {
       await pumpApp(
         tester,
         content: FakeContentRepository(welcomeEnabled: true),
       );
 
+      // Signed out: nothing to act on, so nothing is asked of them.
+      expect(find.text('Welcome back'), findsOneWidget);
+      expect(find.text('Welcome to 1XBET Agent'), findsNothing);
+    });
+
+    testWidgets('it appears after signing in, with the joining requirement',
+        (tester) async {
+      await pumpApp(
+        tester,
+        loggedIn: true,
+        content: FakeContentRepository(welcomeEnabled: true),
+        wallet: FakeWalletRepository(balance: 0),
+      );
+
       expect(find.text('Welcome to 1XBET Agent'), findsOneWidget);
       expect(find.text('To become an agent'), findsOneWidget);
-      // 3000 USDT at the fake rate of 90.
       expect(
         find.textContaining('3000 USDT (about ₹270000.00) is mandatory'),
         findsOneWidget,
@@ -286,54 +299,70 @@ void main() {
     testWidgets('it closes and stays closed', (tester) async {
       await pumpApp(
         tester,
+        loggedIn: true,
         content: FakeContentRepository(welcomeEnabled: true),
+        wallet: FakeWalletRepository(balance: 0),
       );
       expect(find.text('Welcome to 1XBET Agent'), findsOneWidget);
 
       await tester.tap(find.byKey(const Key('closeWelcome')));
       await tester.pumpAndSettle();
-      expect(find.text('Welcome to 1XBET Agent'), findsNothing);
 
-      // Still signed out on the login screen, and it does not come back.
-      expect(find.text('Welcome back'), findsOneWidget);
+      expect(find.text('Welcome to 1XBET Agent'), findsNothing);
+      expect(find.text('Total balance'), findsOneWidget);
+
       await tester.pump(const Duration(seconds: 1));
+      expect(find.text('Welcome to 1XBET Agent'), findsNothing);
+    });
+
+    testWidgets('a funded agent is not asked to join again', (tester) async {
+      await pumpApp(
+        tester,
+        loggedIn: true,
+        content: FakeContentRepository(welcomeEnabled: true),
+        // Above the joining minimum of 3000 USDT at 90 = ₹270,000.
+        wallet: FakeWalletRepository(balance: 300000),
+      );
+
+      expect(find.text('Total balance'), findsOneWidget);
       expect(find.text('Welcome to 1XBET Agent'), findsNothing);
     });
 
     testWidgets('an admin can switch the dialog off', (tester) async {
       await pumpApp(
         tester,
+        loggedIn: true,
         content: FakeContentRepository(welcomeEnabled: false),
+        wallet: FakeWalletRepository(balance: 0),
       );
 
       expect(find.text('Welcome to 1XBET Agent'), findsNothing);
-      expect(find.text('Welcome back'), findsOneWidget);
+      expect(find.text('Total balance'), findsOneWidget);
     });
 
-    testWidgets('the promotion shows on sign-in and can be dismissed',
+    testWidgets('the promotion shows on Home and can be dismissed',
         (tester) async {
       await pumpApp(
         tester,
+        loggedIn: true,
         content: FakeContentRepository(
           welcomeEnabled: false,
           promoEnabled: true,
         ),
       );
 
-      expect(
-        find.text('Bet on every match, live on 1XBET'),
-        findsOneWidget,
-      );
+      final headline = find.text('Bet on every match, live on 1XBET');
+      expect(headline, findsOneWidget);
 
       await tester.tap(find.byKey(const Key('closePromo')));
       await tester.pumpAndSettle();
 
-      expect(find.text('Bet on every match, live on 1XBET'), findsNothing);
-      expect(find.text('Welcome back'), findsOneWidget);
+      expect(headline, findsNothing);
+      expect(find.text('Total balance'), findsOneWidget);
     });
 
     testWidgets('no promotion is shown when it is off', (tester) async {
-      await pumpApp(tester);
+      await pumpApp(tester, loggedIn: true);
       expect(find.byKey(const Key('closePromo')), findsNothing);
     });
   });
