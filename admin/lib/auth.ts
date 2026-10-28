@@ -149,6 +149,11 @@ export async function requireAdmin(): Promise<Admin> {
   return admin;
 }
 
+/** For pages that show super-admin-only controls. */
+export async function isSuperAdmin(): Promise<boolean> {
+  return (await getAdmin())?.role === "SUPER_ADMIN";
+}
+
 export async function requireSuperAdmin(): Promise<Admin> {
   const admin = await requireAdmin();
   if (admin.role !== "SUPER_ADMIN") {

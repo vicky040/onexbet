@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, requireSuperAdmin } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { getSettings, prisma } from "@/lib/db";
 import { ok, readBody, withRoute } from "@/lib/http";
@@ -13,7 +13,7 @@ export const GET = withRoute(async () => {
 });
 
 export const PATCH = withRoute(async (request: Request) => {
-  const admin = await requireAdmin();
+  const admin = await requireSuperAdmin();
   const body = await readBody(request, updateSettingsSchema);
   await getSettings();
 

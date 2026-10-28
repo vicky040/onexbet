@@ -224,8 +224,63 @@ check "unblock" "ACTIVE" \
   "$(curl -s -b "$JAR" -X PATCH $BASE/api/admin/agents/$AGENTID -H 'content-type: application/json' \
      -d '{"status":"ACTIVE"}' | j data.status)"
 
+echo "=== panel users (super admin only) ==="
+check "admins list is readable by a super admin" "yes"   "$(curl -s -b "$JAR" $BASE/api/admin/admins | j data.0.email | grep -q '@' && echo yes || echo no)"
+
+OPPW="operator$RUN"
+OPEMAIL="operator$RUN@onexbet.app"
+check "create an operator" "OPERATOR"   "$(curl -s -b "$JAR" -X POST $BASE/api/admin/admins -H 'content-type: application/json'      -d "{\"name\":\"Smoke Operator\",\"email\":\"$OPEMAIL\",\"password\":\"$OPPW\",\"role\":\"OPERATOR\"}" | j data.role)"
+check "duplicate email refused" "conflict"   "$(curl -s -b "$JAR" -X POST $BASE/api/admin/admins -H 'content-type: application/json'      -d "{\"name\":\"Dup\",\"email\":\"$OPEMAIL\",\"password\":\"$OPPW\"}" | j error.code)"
+check "a super admin cannot demote themselves" "bad_request"   "$(SELF=$(curl -s -b "$JAR" $BASE/api/admin/auth/me | j data.id);      curl -s -b "$JAR" -X PATCH $BASE/api/admin/admins/$SELF -H 'content-type: application/json'      -d '{"role":"OPERATOR"}' | j error.code)"
+
+echo "=== an operator is held to the day-to-day actions ==="
+OPJAR="$(mktemp -t onexbet-smoke-op.XXXXXX)"
+curl -s -c "$OPJAR" -X POST $BASE/api/admin/auth/login -H 'content-type: application/json'   -d "{\"email\":\"$OPEMAIL\",\"password\":\"$OPPW\"}" > /dev/null
+check "operator can read the dashboard" "yes"   "$(curl -s -b "$OPJAR" $BASE/api/admin/dashboard | j data.overview.agents.total | grep -qE '^[0-9]+$' && echo yes || echo no)"
+check "operator may approve deposits" "yes"   "$(curl -s -b "$OPJAR" "$BASE/api/admin/deposits?status=PENDING" | j meta.pendingCount | grep -qE '^[0-9]+$' && echo yes || echo no)"
+check "operator cannot edit an agent" "forbidden"   "$(curl -s -b "$OPJAR" -X PATCH $BASE/api/admin/agents/$AGENTID -H 'content-type: application/json'      -d '{"payinCommissionRate":9}' | j error.code)"
+check "operator cannot adjust a balance" "forbidden"   "$(curl -s -b "$OPJAR" -X POST $BASE/api/admin/agents/$AGENTID/balance -H 'content-type: application/json'      -d '{"amount":10,"reason":"nope"}' | j error.code)"
+check "operator cannot change settings" "forbidden"   "$(curl -s -b "$OPJAR" -X PATCH $BASE/api/admin/settings -H 'content-type: application/json'      -d '{"minDepositAmount":1}' | j error.code)"
+check "operator cannot manage panel users" "forbidden"   "$(curl -s -b "$OPJAR" $BASE/api/admin/admins | j error.code)"
+check "operator cannot correct a payin" "forbidden"   "$(PAYINID=$(curl -s -b "$JAR" $BASE/api/admin/payins | j data.0.id);      curl -s -b "$OPJAR" -X PATCH $BASE/api/admin/payins/$PAYINID -H 'content-type: application/json'      -d '{"amount":1,"reason":"nope"}' | j error.code)"
+rm -f "$OPJAR"
+
+echo "=== corrections move the balance by the difference ==="
+PAYINID=$(curl -s -b "$JAR" $BASE/api/admin/payins | j data.0.id)
+P_AMOUNT=$(curl -s -b "$JAR" $BASE/api/admin/payins/$PAYINID | j data.amount)
+P_COMM=$(curl -s -b "$JAR" $BASE/api/admin/payins/$PAYINID | j data.commission)
+BAL_PRE=$(curl -s $BASE/api/v1/wallet/summary -H "$AUTH" | j data.totalBalance)
+NEW_AMOUNT=$(node -e "console.log(($P_AMOUNT - 100).toFixed(2))")
+CORRECTED=$(curl -s -b "$JAR" -X PATCH $BASE/api/admin/payins/$PAYINID -H 'content-type: application/json'   -d "{\"amount\":$NEW_AMOUNT,\"reason\":\"smoke correction\"}")
+check "payin amount corrected" "$NEW_AMOUNT"   "$(node -e "console.log(Number($(echo "$CORRECTED" | j data.amount)).toFixed(2))")"
+BAL_POST=$(curl -s $BASE/api/v1/wallet/summary -H "$AUTH" | j data.totalBalance)
+# A payin's effect on the float is commission - amount, so reducing the
+# amount leaves the float better off by the amount less the lost commission.
+EXPECTED=$(node -e "
+  const newComm = $(echo "$CORRECTED" | j data.commission);
+  console.log(((newComm - $NEW_AMOUNT) - ($P_COMM - $P_AMOUNT)).toFixed(2));
+")
+check "balance moved by exactly the difference" "$EXPECTED"   "$(node -e "console.log(($BAL_POST - $BAL_PRE).toFixed(2))")"
+check "a correction needs a reason" "validation_failed"   "$(curl -s -b "$JAR" -X PATCH $BASE/api/admin/payins/$PAYINID -H 'content-type: application/json'      -d '{"amount":500}' | j error.code)"
+
+SETTLEDID=$(curl -s -b "$JAR" "$BASE/api/admin/payouts?status=COMPLETED" | j data.0.id)
+PO_AMOUNT=$(curl -s -b "$JAR" "$BASE/api/admin/payouts?status=COMPLETED" | j data.0.amount)
+PO_COMM=$(curl -s -b "$JAR" "$BASE/api/admin/payouts?status=COMPLETED" | j data.0.commission)
+BAL2_PRE=$(curl -s $BASE/api/v1/wallet/summary -H "$AUTH" | j data.totalBalance)
+PO_NEW=$(node -e "console.log(($PO_AMOUNT + 2000).toFixed(2))")
+PO_FIXED=$(curl -s -b "$JAR" -X PATCH $BASE/api/admin/payouts/$SETTLEDID/amounts -H 'content-type: application/json'   -d "{\"amount\":$PO_NEW,\"reason\":\"smoke correction\"}")
+check "settled payout amount corrected" "$PO_NEW"   "$(node -e "console.log(Number($(echo "$PO_FIXED" | j data.amount)).toFixed(2))")"
+BAL2_POST=$(curl -s $BASE/api/v1/wallet/summary -H "$AUTH" | j data.totalBalance)
+PO_EXPECTED=$(node -e "
+  const c = $(echo "$PO_FIXED" | j data.commission);
+  console.log((($PO_NEW + c) - ($PO_AMOUNT + $PO_COMM)).toFixed(2));
+")
+check "settled payout re-credited the difference" "$PO_EXPECTED"   "$(node -e "console.log(($BAL2_POST - $BAL2_PRE).toFixed(2))")"
+
+check "the agent was told about the correction" "yes"   "$(curl -s $BASE/api/v1/notifications -H "$AUTH" | j data.0.title | grep -qiE 'corrected' && echo yes || echo no)"
+
 echo "=== admin panel pages render ==="
-for path in / /agents /deposits /payouts /payins /banks /notifications /support /settings /audit; do
+for path in / /agents /deposits /payouts /payins /banks /notifications /support /admins /settings /audit; do
   code=$(curl -s -b "$JAR" -o /dev/null -w '%{http_code}' "$BASE$path")
   check "GET $path" "200" "$code"
 done

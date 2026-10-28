@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import clsx from "clsx";
 import { replySupportAction } from "@/app/actions";
+import { AutoRefresh } from "@/components/auto-refresh";
 import { ActionForm, SubmitButton, Textarea } from "@/components/form";
 import { Card, PageHeader, StatusBadge } from "@/components/ui";
 import { prisma } from "@/lib/db";
@@ -37,6 +38,7 @@ export default async function SupportThreadPage({ params }: Params) {
 
   return (
     <>
+      <AutoRefresh seconds={8} />
       <PageHeader
         title={agent.name}
         subtitle={`+91 ${agent.mobile} · balance ${formatInr(agent.balance.toString())}`}

@@ -1,18 +1,21 @@
 import type { Prisma } from "@prisma/client";
+import { DataTable, type Column } from "@/components/data-table";
 import {
   Card,
   DateTime,
   FilterBar,
   PageHeader,
   Pagination,
-  Table,
-  Td,
 } from "@/components/ui";
 import { prisma } from "@/lib/db";
 
 export const metadata = { title: "Audit log · 1XBET Agent Admin" };
 
 const PER_PAGE = 50;
+
+type AuditRow = Prisma.AuditLogGetPayload<{
+  include: { admin: { select: { name: true; email: true } } };
+}>;
 
 export default async function AuditPage({
   searchParams,
@@ -40,6 +43,42 @@ export default async function AuditPage({
     prisma.auditLog.count({ where }),
     prisma.auditLog.groupBy({ by: ["entity"], _count: { _all: true } }),
   ]);
+
+  const columns: Column<AuditRow>[] = [
+    {
+      header: "What happened",
+      primary: true,
+      cell: (log) => (
+        <div>
+          <span className="block text-sm font-medium text-ink">{log.summary}</span>
+          <code className="mt-1 inline-block rounded bg-inset px-1.5 py-0.5 text-xs font-semibold text-info">
+            {log.action}
+          </code>
+        </div>
+      ),
+    },
+    {
+      header: "Admin",
+      cell: (log) => (
+        <div>
+          <span className="text-sm text-ink">{log.admin?.name ?? "—"}</span>
+          <span className="block text-xs text-muted">
+            {log.admin?.email ?? "deleted admin"}
+          </span>
+        </div>
+      ),
+    },
+    {
+      header: "Record",
+      cell: (log) => (
+        <span className="text-xs text-muted">
+          {log.entity}
+          {log.entityId ? ` · ${log.entityId.slice(0, 10)}…` : ""}
+        </span>
+      ),
+    },
+    { header: "When", cell: (log) => <DateTime value={log.createdAt} /> },
+  ];
 
   return (
     <>
@@ -76,38 +115,12 @@ export default async function AuditPage({
           </label>
         </FilterBar>
 
-        <Table
-          head={["When", "Admin", "Action", "What happened"]}
+        <DataTable
+          columns={columns}
+          rows={logs}
+          rowKey={(log) => log.id}
           empty="Nothing has been recorded yet."
-        >
-          {logs.map((log) => (
-            <tr key={log.id} className="hover:bg-inset/60">
-              <Td>
-                <DateTime value={log.createdAt} />
-              </Td>
-              <Td>
-                <span className="text-sm font-medium text-ink">
-                  {log.admin?.name ?? "—"}
-                </span>
-                <span className="block text-xs text-muted">
-                  {log.admin?.email ?? "deleted admin"}
-                </span>
-              </Td>
-              <Td>
-                <code className="rounded bg-inset px-1.5 py-0.5 text-xs font-semibold text-info">
-                  {log.action}
-                </code>
-              </Td>
-              <Td>
-                <span className="text-sm text-ink">{log.summary}</span>
-                <span className="block text-xs text-muted">
-                  {log.entity}
-                  {log.entityId ? ` · ${log.entityId}` : ""}
-                </span>
-              </Td>
-            </tr>
-          ))}
-        </Table>
+        />
 
         <Pagination
           page={page}

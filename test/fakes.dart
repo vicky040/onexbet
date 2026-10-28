@@ -282,6 +282,20 @@ class FakeInboxRepository implements InboxRepository {
     ];
   }
 
+  /// Stands in for an admin replying from the panel while the agent has the
+  /// chat open.
+  void addSupportReply(String text) {
+    _messages = [
+      ..._messages,
+      ChatMessage(
+        id: 'reply${_messages.length + 1}',
+        text: text,
+        fromUser: false,
+        createdAt: DateTime.now(),
+      ),
+    ];
+  }
+
   @override
   Future<List<ChatMessage>> supportMessages() async =>
       List.unmodifiable(_messages);

@@ -1,5 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { approveDepositAction, rejectDepositAction } from "@/app/actions";
+import { AutoRefresh } from "@/components/auto-refresh";
+import { DataTable, type Column } from "@/components/data-table";
 import { ActionForm, SubmitButton } from "@/components/form";
 import {
   AgentCell,
@@ -12,8 +14,6 @@ import {
   Reference,
   StatTile,
   StatusBadge,
-  Table,
-  Td,
 } from "@/components/ui";
 import { prisma } from "@/lib/db";
 import { formatInr, toNumber } from "@/lib/money";
@@ -21,6 +21,12 @@ import { formatInr, toNumber } from "@/lib/money";
 export const metadata = { title: "Deposits · 1XBET Agent Admin" };
 
 const PER_PAGE = 25;
+
+type Deposit = Prisma.DepositGetPayload<{
+  include: {
+    agent: { select: { id: true; name: true; mobile: true; status: true } };
+  };
+}>;
 
 export default async function DepositsPage({
   searchParams,
@@ -75,8 +81,84 @@ export default async function DepositsPage({
     }),
   ]);
 
+  const columns: Column<Deposit>[] = [
+    {
+      header: "Reference",
+      primary: true,
+      cell: (deposit) => (
+        <div>
+          <Reference>{deposit.reference}</Reference>
+          {deposit.reviewNote ? (
+            <span className="block truncate text-xs text-muted">
+              {deposit.reviewNote}
+            </span>
+          ) : null}
+        </div>
+      ),
+    },
+    { header: "Agent", cell: (deposit) => <AgentCell agent={deposit.agent} /> },
+    {
+      header: "Amount",
+      numeric: true,
+      cell: (deposit) => (
+        <div>
+          <Money value={deposit.amount.toString()} />
+          {deposit.afterBalance ? (
+            <span className="block text-xs text-muted">
+              → {formatInr(deposit.afterBalance.toString())}
+            </span>
+          ) : null}
+        </div>
+      ),
+    },
+    {
+      header: "UTR",
+      cell: (deposit) => (
+        <span className="tabular text-xs text-muted">{deposit.utr}</span>
+      ),
+    },
+    { header: "Status", cell: (deposit) => <StatusBadge status={deposit.status} /> },
+    { header: "Submitted", cell: (deposit) => <DateTime value={deposit.createdAt} /> },
+    {
+      header: "",
+      actions: true,
+      cell: (deposit) =>
+        deposit.status === "PENDING" ? (
+          <>
+            <ActionForm
+              action={approveDepositAction}
+              hideMessage
+              confirm={`Approve ${deposit.reference} and credit ${formatInr(
+                deposit.amount.toString(),
+              )}?`}
+            >
+              <input type="hidden" name="depositId" value={deposit.id} />
+              <SubmitButton variant="success" size="sm">
+                Approve
+              </SubmitButton>
+            </ActionForm>
+            <ActionForm
+              action={rejectDepositAction}
+              hideMessage
+              confirm={`Reject ${deposit.reference}?`}
+            >
+              <input type="hidden" name="depositId" value={deposit.id} />
+              <SubmitButton variant="secondary" size="sm">
+                Reject
+              </SubmitButton>
+            </ActionForm>
+          </>
+        ) : (
+          <span className="text-xs text-muted">
+            {deposit.reviewedAt ? "Reviewed" : "—"}
+          </span>
+        ),
+    },
+  ];
+
   return (
     <>
+      <AutoRefresh seconds={20} />
       <PageHeader
         title="Deposits"
         subtitle="Agents topping up their float. Approving credits their balance."
@@ -127,75 +209,12 @@ export default async function DepositsPage({
             ) : null}
           </FilterBar>
 
-          <Table
-            head={["Reference", "Agent", "Amount", "UTR", "Status", "When", ""]}
+          <DataTable
+            columns={columns}
+            rows={deposits}
+            rowKey={(deposit) => deposit.id}
             empty="No deposits match this filter."
-          >
-            {deposits.map((deposit) => (
-              <tr key={deposit.id} className="hover:bg-inset/60">
-                <Td>
-                  <Reference>{deposit.reference}</Reference>
-                  {deposit.reviewNote ? (
-                    <span className="block max-w-48 truncate text-xs text-muted">
-                      {deposit.reviewNote}
-                    </span>
-                  ) : null}
-                </Td>
-                <Td>
-                  <AgentCell agent={deposit.agent} />
-                </Td>
-                <Td numeric>
-                  <Money value={deposit.amount.toString()} />
-                  {deposit.afterBalance ? (
-                    <span className="block text-xs text-muted">
-                      → {formatInr(deposit.afterBalance.toString())}
-                    </span>
-                  ) : null}
-                </Td>
-                <Td>
-                  <span className="tabular text-xs text-muted">{deposit.utr}</span>
-                </Td>
-                <Td>
-                  <StatusBadge status={deposit.status} />
-                </Td>
-                <Td>
-                  <DateTime value={deposit.createdAt} />
-                </Td>
-                <Td>
-                  {deposit.status === "PENDING" ? (
-                    <div className="flex justify-end gap-2">
-                      <ActionForm
-                        action={approveDepositAction}
-                        hideMessage
-                        confirm={`Approve ${deposit.reference} and credit ${formatInr(
-                          deposit.amount.toString(),
-                        )}?`}
-                      >
-                        <input type="hidden" name="depositId" value={deposit.id} />
-                        <SubmitButton variant="success" size="sm">
-                          Approve
-                        </SubmitButton>
-                      </ActionForm>
-                      <ActionForm
-                        action={rejectDepositAction}
-                        hideMessage
-                        confirm={`Reject ${deposit.reference}?`}
-                      >
-                        <input type="hidden" name="depositId" value={deposit.id} />
-                        <SubmitButton variant="secondary" size="sm">
-                          Reject
-                        </SubmitButton>
-                      </ActionForm>
-                    </div>
-                  ) : (
-                    <span className="block text-right text-xs text-muted">
-                      {deposit.reviewedAt ? "Reviewed" : "—"}
-                    </span>
-                  )}
-                </Td>
-              </tr>
-            ))}
-          </Table>
+          />
 
           <Pagination
             page={page}

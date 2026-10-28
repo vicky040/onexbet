@@ -4,6 +4,9 @@
 #
 # Set these in the Vercel project (Settings -> Environment Variables):
 #   API_BASE_URL     required, e.g. https://onexbet-admin.vercel.app/api/v1
+#   ANDROID_APK_URL  optional, e.g. /downloads/onexbet-agent.apk. When set,
+#                    Profile offers the Android download; when empty it does
+#                    not, so an unset variable never shows a dead link.
 #   FLUTTER_VERSION  optional, defaults to the version below
 #
 # Vercel project settings:
@@ -51,7 +54,17 @@ flutter config --no-analytics --enable-web
 flutter pub get
 
 echo "Building against $API_BASE_URL"
-flutter build web --release --dart-define=API_BASE_URL="$API_BASE_URL"
+if [ -n "${ANDROID_APK_URL:-}" ]; then
+  echo "Android download offered at $ANDROID_APK_URL"
+  if [ ! -f "web${ANDROID_APK_URL}" ] && case "$ANDROID_APK_URL" in /*) true ;; *) false ;; esac; then
+    echo "WARNING: $ANDROID_APK_URL is a local path but web${ANDROID_APK_URL} is not in this build." >&2
+    echo "         The Profile link will 404. See DEPLOY.md." >&2
+  fi
+fi
+
+flutter build web --release \
+  --dart-define=API_BASE_URL="$API_BASE_URL" \
+  --dart-define=ANDROID_APK_URL="${ANDROID_APK_URL:-}"
 
 echo "Built build/web:"
 ls -la build/web | head -20

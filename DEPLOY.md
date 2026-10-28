@@ -112,7 +112,12 @@ directory and the SPA rewrite, so the only thing to add is:
 | Name | Value |
 | --- | --- |
 | `API_BASE_URL` | `https://onexbet-admin.vercel.app/api/v1` |
+| `ANDROID_APK_URL` | `/downloads/onexbet-agent.apk` (optional) |
 | `FLUTTER_VERSION` | `3.44.1` (optional; the build script's default) |
+
+`ANDROID_APK_URL` is what makes **Profile → Download Android app** appear in
+the agent app. Leave it unset and the option is simply not shown, so it can
+never be a dead link.
 
 `scripts/vercel-build-web.sh` downloads the Flutter SDK and runs
 `flutter build web --release --dart-define=API_BASE_URL=…`. It **fails the
@@ -182,6 +187,36 @@ That gives up automatic deploys on push.
       `flutter build apk --release --dart-define=API_BASE_URL=https://onexbet-admin.vercel.app/api/v1`
       (the debug cleartext exception only covers localhost).
 
+## Hosting the Android build
+
+The APK is ~54 MB, which does not belong in git, so it is **not** in the
+repository. It is served as a static file by the Flutter project:
+
+```sh
+# Build it against the deployed API, not localhost.
+flutter build apk --release   --dart-define=API_BASE_URL=https://onexbet-admin.vercel.app/api/v1
+
+mkdir -p web/downloads
+cp build/app/outputs/flutter-apk/app-release.apk web/downloads/onexbet-agent.apk
+
+# Deploy from the CLI, which uploads the working directory.
+vercel --prod
+```
+
+`web/` is copied into `build/web` by `flutter build web`, so the file ends up
+at `/downloads/onexbet-agent.apk`, and `vercel.json` serves it as
+`application/vnd.android.package-archive` so Android offers to install it.
+
+**The catch:** `web/downloads/` is git-ignored, so this only works for a CLI
+deploy. If you connect Git for automatic deploys, that file will not be in
+the checkout and the link will 404 — the build prints a warning when that
+happens. For Git deploys, upload the APK to a GitHub Release instead and
+point `ANDROID_APK_URL` at the asset URL.
+
+Without a keystore the release APK is signed with the debug key, which is
+fine for sideloading but not for the Play Store; see the Android release
+notes in README.md.
+
 ## Things that bit during the first deploy
 
 **Do not create the project with `vercel project add` first.** Doing that
@@ -213,7 +248,12 @@ for `db:deploy` and `db:seed`; a pooled connection cannot run them.
 
 **Migrations are not part of the build.** `npm run build` runs
 `prisma generate && next build` only. Run `npm run db:deploy` yourself when a
-release contains a migration, before promoting it.
+release contains a migration, before promoting it:
+
+```sh
+cd admin
+DATABASE_URL="<direct connection string>" npm run db:deploy
+```
 
 **The admin API has no CORS and needs none** — the panel calls it from its
 own origin. Only `/api/v1` is opened up, and only to `ALLOWED_ORIGINS`.

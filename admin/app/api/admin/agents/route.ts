@@ -1,5 +1,5 @@
 import type { Prisma } from "@prisma/client";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, requireSuperAdmin } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { getSettings, prisma } from "@/lib/db";
 import { ApiError } from "@/lib/errors";
@@ -54,7 +54,7 @@ export const GET = withRoute(async (request: Request) => {
 
 /** Creates an agent directly, bypassing sign-up. */
 export const POST = withRoute(async (request: Request) => {
-  const admin = await requireAdmin();
+  const admin = await requireSuperAdmin();
   const body = await readBody(request, createAgentSchema);
   const settings = await getSettings();
 

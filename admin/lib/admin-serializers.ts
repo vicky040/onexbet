@@ -155,6 +155,19 @@ export function adminProfile(admin: Admin) {
   };
 }
 
+/** A panel user, for the Admins screen. */
+export function adminUser(admin: Admin) {
+  return {
+    id: admin.id,
+    name: admin.name,
+    email: admin.email,
+    role: admin.role,
+    isActive: admin.isActive,
+    lastLoginAt: iso(admin.lastLoginAt),
+    createdAt: iso(admin.createdAt),
+  };
+}
+
 export function adminSettings(settings: Settings) {
   return {
     defaultPayinCommissionRate: toNumber(settings.defaultPayinCommissionRate),

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -16,14 +18,41 @@ class SupportChatScreen extends ConsumerStatefulWidget {
   ConsumerState<SupportChatScreen> createState() => _SupportChatScreenState();
 }
 
-class _SupportChatScreenState extends ConsumerState<SupportChatScreen> {
+class _SupportChatScreenState extends ConsumerState<SupportChatScreen>
+    with WidgetsBindingObserver {
+  /// Support replies arrive from the admin panel, so the conversation has to
+  /// be re-read while the agent is looking at it. Without this a reply only
+  /// shows up after leaving the screen and coming back.
+  static const _pollInterval = Duration(seconds: 5);
+
   final _input = TextEditingController();
+  Timer? _poll;
   var _sending = false;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _poll = Timer.periodic(_pollInterval, (_) => _refresh());
+  }
+
+  @override
   void dispose() {
+    _poll?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _input.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Catch up immediately on coming back, rather than waiting for the tick.
+    if (state == AppLifecycleState.resumed) _refresh();
+  }
+
+  void _refresh() {
+    if (!mounted || _sending) return;
+    ref.read(supportChatProvider.notifier).refresh();
   }
 
   Future<void> _send() async {
@@ -45,7 +74,17 @@ class _SupportChatScreenState extends ConsumerState<SupportChatScreen> {
     final messages = ref.watch(supportChatProvider);
 
     return Scaffold(
-      appBar: const SubPageAppBar(title: 'Support'),
+      appBar: SubPageAppBar(
+        title: 'Support',
+        actions: [
+          IconButton(
+            tooltip: 'Check for new replies',
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed: _refresh,
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 760),
@@ -68,7 +107,9 @@ class _SupportChatScreenState extends ConsumerState<SupportChatScreen> {
                 const Padding(
                   padding: EdgeInsets.only(bottom: 6),
                   child: Text(
-                    'Support is typing…',
+                    // Replies now come from a person in the admin panel, so
+                    // the old "Support is typing…" was simply untrue.
+                    'Sending…',
                     style: TextStyle(color: AppColors.textMuted, fontSize: 13),
                   ),
                 ),

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { requireAdmin } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { prisma } from "@/lib/db";
 import { ApiError } from "@/lib/errors";
@@ -17,7 +17,7 @@ const schema = bankAccountUpdateSchema.extend({
 
 /** Admins can correct an agent's bank details or switch it on and off. */
 export const PATCH = withRoute(async (request: Request, { params }: Params) => {
-  const admin = await requireAdmin();
+  const admin = await requireSuperAdmin();
   const { id } = await params;
   const body = await readBody(request, schema);
 
@@ -56,7 +56,7 @@ export const PATCH = withRoute(async (request: Request, { params }: Params) => {
 });
 
 export const DELETE = withRoute(async (_request: Request, { params }: Params) => {
-  const admin = await requireAdmin();
+  const admin = await requireSuperAdmin();
   const { id } = await params;
 
   const existing = await prisma.bankAccount.findUnique({ where: { id } });

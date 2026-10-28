@@ -131,6 +131,38 @@ Money is `Decimal(14,2)` everywhere, arithmetic goes through
 concurrent operations cannot lose one another's write, and anything that
 would take a balance below zero is refused.
 
+## Who can do what
+
+Two roles, set per panel user under **Panel users** (super admins only):
+
+| | Operator | Super admin |
+| --- | --- | --- |
+| Read every screen | yes | yes |
+| Approve / reject deposits | yes | yes |
+| Create, settle, fail, release payouts | yes | yes |
+| Record a payin | yes | yes |
+| Send notifications, answer support | yes | yes |
+| Create and edit agents, incl. commission rates | — | yes |
+| Adjust an agent's balance | — | yes |
+| Correct a payin or payout | — | yes |
+| Change bank account details, turn them on/off | — | yes |
+| Edit platform settings and default commissions | — | yes |
+| Manage panel users | — | yes |
+
+The gate is enforced on the API and on the server actions behind the forms,
+not just by hiding buttons — an operator calling the endpoint directly gets
+`403 forbidden`.
+
+Two locks stop a lockout: you cannot remove your own access, and the last
+active super admin cannot be demoted or disabled.
+
+**Corrections** re-apply the ledger difference rather than rewriting
+history. Correcting a payin moves the agent's balance by the change in
+`commission - amount`; correcting a settled payout moves it by the change in
+`amount + commission`. The agent is notified and the audit log records the
+before and after. Earlier records keep the balance snapshots they had at the
+time, because that is what the balance actually was.
+
 ## Security notes
 
 - Agents use bearer access tokens (1 h) with rotating refresh tokens (30 d,

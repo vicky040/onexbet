@@ -1,11 +1,14 @@
+import Link from "next/link";
 import type { Prisma } from "@prisma/client";
-import { createPayinAction } from "@/app/actions";
+import { createPayinAction, updatePayinAction } from "@/app/actions";
+import { DataTable, type Column } from "@/components/data-table";
 import {
   ActionForm,
   Disclosure,
   Field,
   Select,
   SubmitButton,
+  Textarea,
 } from "@/components/form";
 import {
   AgentCell,
@@ -17,9 +20,8 @@ import {
   Pagination,
   Reference,
   StatTile,
-  Table,
-  Td,
 } from "@/components/ui";
+import { isSuperAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { formatInr, formatPercent, toNumber } from "@/lib/money";
 
@@ -27,14 +29,26 @@ export const metadata = { title: "Payins · 1XBET Agent Admin" };
 
 const PER_PAGE = 25;
 
+type Payin = Prisma.PayinGetPayload<{
+  include: {
+    agent: { select: { id: true; name: true; mobile: true; status: true } };
+  };
+}>;
+
 export default async function PayinsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; agentId?: string; page?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    agentId?: string;
+    page?: string;
+    correct?: string;
+  }>;
 }) {
   const params = await searchParams;
   const page = Math.max(1, Number(params.page ?? 1) || 1);
   const q = params.q?.trim();
+  const superAdmin = await isSuperAdmin();
 
   const where: Prisma.PayinWhereInput = {
     ...(params.agentId ? { agentId: params.agentId } : {}),
@@ -48,7 +62,7 @@ export default async function PayinsPage({
       : {}),
   };
 
-  const [payins, total, totals, agents] = await Promise.all([
+  const [payins, total, totals, agents, correcting] = await Promise.all([
     prisma.payin.findMany({
       where,
       include: {
@@ -65,7 +79,67 @@ export default async function PayinsPage({
       select: { id: true, name: true, mobile: true, balance: true },
       orderBy: { name: "asc" },
     }),
+    superAdmin && params.correct
+      ? prisma.payin.findUnique({ where: { id: params.correct } })
+      : null,
   ]);
+
+  const columns: Column<Payin>[] = [
+    {
+      header: "Reference",
+      primary: true,
+      cell: (payin) => (
+        <div>
+          <Reference>{payin.reference}</Reference>
+          <span className="tabular block text-xs text-muted">{payin.txnRef}</span>
+        </div>
+      ),
+    },
+    { header: "Agent", cell: (payin) => <AgentCell agent={payin.agent} /> },
+    {
+      header: "Amount",
+      numeric: true,
+      cell: (payin) => <Money value={payin.amount.toString()} />,
+    },
+    {
+      header: "Commission",
+      numeric: true,
+      cell: (payin) => (
+        <div>
+          <Money value={payin.commission.toString()} tone="success" />
+          <span className="block text-xs text-muted">
+            {formatPercent(payin.commissionRate.toString())}
+          </span>
+        </div>
+      ),
+    },
+    {
+      header: "Balance after",
+      numeric: true,
+      cell: (payin) => (
+        <div>
+          <span className="text-xs text-muted">
+            {formatInr(payin.previousBalance.toString())} →
+          </span>{" "}
+          <Money value={payin.afterBalance.toString()} tone="muted" />
+        </div>
+      ),
+    },
+    { header: "When", cell: (payin) => <DateTime value={payin.createdAt} /> },
+    {
+      header: "",
+      actions: true,
+      cell: (payin) =>
+        superAdmin ? (
+          <Link
+            href={`/payins?correct=${payin.id}`}
+            className="px-2 py-1.5 text-xs font-semibold text-sky hover:underline"
+          >
+            Correct
+          </Link>
+        ) : null,
+    },
+  ];
 
   return (
     <>
@@ -87,6 +161,63 @@ export default async function PayinsPage({
         />
         <StatTile label="Records" value={`${total}`} />
       </div>
+
+      {correcting ? (
+        <div className="mt-6">
+          <Card
+            title={`Correct ${correcting.reference}`}
+            description="Changing the amount or rate moves the agent's balance by the difference."
+            actions={
+              <Link
+                href="/payins"
+                className="text-xs font-semibold text-muted hover:text-navy hover:underline"
+              >
+                Cancel
+              </Link>
+            }
+          >
+            <ActionForm
+              action={updatePayinAction}
+              className="space-y-4"
+              confirm="Apply this correction?"
+            >
+              <input type="hidden" name="payinId" value={correcting.id} />
+              <div className="grid gap-4 sm:grid-cols-3">
+                <Field
+                  label="Amount"
+                  name="amount"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  defaultValue={correcting.amount.toString()}
+                />
+                <Field
+                  label="Commission %"
+                  name="commissionRate"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  defaultValue={correcting.commissionRate.toString()}
+                />
+                <Field
+                  label="Player reference"
+                  name="txnRef"
+                  defaultValue={correcting.txnRef}
+                />
+              </div>
+              <Textarea
+                label="Reason"
+                name="reason"
+                required
+                rows={2}
+                placeholder="Why this record is being corrected"
+              />
+              <SubmitButton>Apply correction</SubmitButton>
+            </ActionForm>
+          </Card>
+        </div>
+      ) : null}
 
       <div className="mt-6 mb-6">
         <Disclosure summary="Record a payin">
@@ -154,49 +285,13 @@ export default async function PayinsPage({
           ) : null}
         </FilterBar>
 
-        <Table
-          head={[
-            "Reference",
-            "Agent",
-            "Amount",
-            "Commission",
-            "Balance after",
-            "When",
-          ]}
+        <DataTable
+          columns={columns}
+          rows={payins}
+          rowKey={(payin) => payin.id}
           empty="No payins match this filter."
-        >
-          {payins.map((payin) => (
-            <tr key={payin.id} className="hover:bg-inset/60">
-              <Td>
-                <Reference>{payin.reference}</Reference>
-                <span className="tabular block text-xs text-muted">
-                  {payin.txnRef}
-                </span>
-              </Td>
-              <Td>
-                <AgentCell agent={payin.agent} />
-              </Td>
-              <Td numeric>
-                <Money value={payin.amount.toString()} />
-              </Td>
-              <Td numeric>
-                <Money value={payin.commission.toString()} tone="success" />
-                <span className="block text-xs text-muted">
-                  {formatPercent(payin.commissionRate.toString())}
-                </span>
-              </Td>
-              <Td numeric>
-                <span className="text-xs text-muted">
-                  {formatInr(payin.previousBalance.toString())} →
-                </span>
-                <Money value={payin.afterBalance.toString()} tone="muted" />
-              </Td>
-              <Td>
-                <DateTime value={payin.createdAt} />
-              </Td>
-            </tr>
-          ))}
-        </Table>
+          minWidth="52rem"
+        />
 
         <Pagination
           page={page}

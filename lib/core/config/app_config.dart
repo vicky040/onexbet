@@ -22,4 +22,16 @@ abstract final class AppConfig {
 
   /// How long to wait for a single request before giving up.
   static const requestTimeout = Duration(seconds: 20);
+
+  /// Where the Android build can be downloaded from.
+  ///
+  /// ```sh
+  /// flutter build web --dart-define=ANDROID_APK_URL=/downloads/app-release.apk
+  /// ```
+  ///
+  /// Left empty the Profile screen simply does not offer the download, rather
+  /// than showing a link that goes nowhere.
+  static const androidApkUrl = String.fromEnvironment("ANDROID_APK_URL");
+
+  static bool get hasAndroidDownload => androidApkUrl.isNotEmpty;
 }

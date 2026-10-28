@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { BankAccount, Deposit, Payin, Payout } from "@prisma/client";
 import {
   adjustBalanceAction,
   toggleBankAction,
   updateAgentAction,
 } from "@/app/actions";
+import { DataTable, type Column } from "@/components/data-table";
 import {
   ActionForm,
   Field,
@@ -16,15 +18,13 @@ import {
   Badge,
   Card,
   DateTime,
-  EmptyState,
   Money,
   PageHeader,
   Reference,
   StatTile,
   StatusBadge,
-  Table,
-  Td,
 } from "@/components/ui";
+import { isSuperAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { formatInr, formatPercent } from "@/lib/money";
 import { agentEarnings, agentSummary } from "@/lib/stats";
@@ -45,6 +45,8 @@ export default async function AgentDetailPage({ params }: Params) {
 
   const agent = await prisma.agent.findUnique({ where: { id } });
   if (!agent) notFound();
+
+  const superAdmin = await isSuperAdmin();
 
   const [summary, earnings, banks, payins, payouts, deposits] = await Promise.all([
     agentSummary(agent),
@@ -69,6 +71,137 @@ export default async function AgentDetailPage({ params }: Params) {
       take: 10,
     }),
   ]);
+
+  const bankColumns: Column<BankAccount>[] = [
+    {
+      header: "Bank",
+      primary: true,
+      cell: (bank) => (
+        <div>
+          <span className="font-semibold text-ink">{bank.bankName}</span>
+          <span className="block text-xs text-muted">{bank.accountHolder}</span>
+        </div>
+      ),
+    },
+    {
+      header: "Account",
+      cell: (bank) => (
+        <span className="tabular text-xs text-muted">
+          ***{bank.accountNumber.slice(-4)} · {bank.ifsc}
+        </span>
+      ),
+    },
+    {
+      header: "UPI",
+      cell: (bank) => <span className="text-xs text-muted">{bank.upiId}</span>,
+    },
+    {
+      header: "Limits",
+      numeric: true,
+      cell: (bank) => (
+        <span className="text-xs text-muted">
+          {formatInr(bank.amountLimit.toString())} · {bank.txnLimit} txns
+        </span>
+      ),
+    },
+    {
+      header: "Active",
+      cell: (bank) =>
+        bank.isActive ? <Badge tone="success">Active</Badge> : <Badge>Off</Badge>,
+    },
+    {
+      header: "",
+      actions: true,
+      cell: (bank) =>
+        superAdmin ? (
+          <ActionForm action={toggleBankAction} hideMessage>
+            <input type="hidden" name="bankId" value={bank.id} />
+            <SubmitButton variant="secondary" size="sm">
+              {bank.isActive ? "Turn off" : "Turn on"}
+            </SubmitButton>
+          </ActionForm>
+        ) : null,
+    },
+  ];
+
+  const payinColumns: Column<Payin>[] = [
+    {
+      header: "Reference",
+      primary: true,
+      cell: (payin) => (
+        <div>
+          <Reference>{payin.reference}</Reference>
+          <span className="tabular block text-xs text-muted">{payin.txnRef}</span>
+        </div>
+      ),
+    },
+    {
+      header: "Amount",
+      numeric: true,
+      cell: (payin) => <Money value={payin.amount.toString()} />,
+    },
+    {
+      header: "Commission",
+      numeric: true,
+      cell: (payin) => (
+        <Money value={payin.commission.toString()} tone="success" />
+      ),
+    },
+    {
+      header: "After balance",
+      numeric: true,
+      cell: (payin) => <Money value={payin.afterBalance.toString()} tone="muted" />,
+    },
+    { header: "When", cell: (payin) => <DateTime value={payin.createdAt} /> },
+  ];
+
+  const payoutColumns: Column<Payout>[] = [
+    {
+      header: "Reference",
+      primary: true,
+      cell: (payout) => (
+        <div>
+          <Reference>{payout.reference}</Reference>
+          <span className="block text-xs text-muted">{payout.upiId}</span>
+        </div>
+      ),
+    },
+    { header: "Status", cell: (payout) => <StatusBadge status={payout.status} /> },
+    {
+      header: "Amount",
+      numeric: true,
+      cell: (payout) => <Money value={payout.amount.toString()} />,
+    },
+    {
+      header: "Commission",
+      numeric: true,
+      cell: (payout) => (
+        <Money value={payout.commission.toString()} tone="success" />
+      ),
+    },
+    { header: "When", cell: (payout) => <DateTime value={payout.createdAt} /> },
+  ];
+
+  const depositColumns: Column<Deposit>[] = [
+    {
+      header: "Reference",
+      primary: true,
+      cell: (deposit) => <Reference>{deposit.reference}</Reference>,
+    },
+    { header: "Status", cell: (deposit) => <StatusBadge status={deposit.status} /> },
+    {
+      header: "Amount",
+      numeric: true,
+      cell: (deposit) => <Money value={deposit.amount.toString()} />,
+    },
+    {
+      header: "UTR",
+      cell: (deposit) => (
+        <span className="tabular text-xs text-muted">{deposit.utr}</span>
+      ),
+    },
+    { header: "When", cell: (deposit) => <DateTime value={deposit.createdAt} /> },
+  ];
 
   return (
     <>
@@ -119,107 +252,154 @@ export default async function AgentDetailPage({ params }: Params) {
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
-        <Card
-          title="Profile & commission"
-          description="Blocking an agent or changing their password signs them out everywhere."
-        >
-          <ActionForm action={updateAgentAction} className="space-y-4">
-            <input type="hidden" name="agentId" value={agent.id} />
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Full name" name="name" defaultValue={agent.name} />
-              <Field
-                label="Email"
-                name="email"
-                type="email"
-                defaultValue={agent.email}
-              />
-              <Select label="Status" name="status" defaultValue={agent.status}>
-                <option value="ACTIVE">Active</option>
-                <option value="PENDING">Pending approval</option>
-                <option value="BLOCKED">Blocked</option>
-              </Select>
-              <Field
-                label="Security deposit (USDT)"
-                name="securityDepositUsdt"
-                type="number"
-                step="0.01"
-                min="0"
-                defaultValue={agent.securityDepositUsdt.toString()}
-              />
-              <Field
-                label="Payin commission %"
-                name="payinCommissionRate"
-                type="number"
-                step="0.01"
-                min="0"
-                max="100"
-                defaultValue={agent.payinCommissionRate.toString()}
-              />
-              <Field
-                label="Payout commission %"
-                name="payoutCommissionRate"
-                type="number"
-                step="0.01"
-                min="0"
-                max="100"
-                defaultValue={agent.payoutCommissionRate.toString()}
-              />
-            </div>
-            <Field
-              label="Set a new password"
-              name="password"
-              type="password"
-              minLength={6}
-              placeholder="Leave blank to keep the current one"
-            />
-            <Textarea
-              label="Internal notes"
-              name="notes"
-              defaultValue={agent.notes ?? ""}
-              rows={2}
-            />
-            <SubmitButton>Save changes</SubmitButton>
-          </ActionForm>
-        </Card>
-
-        <Card
-          title="Adjust balance"
-          description="For corrections only. Every adjustment is audited and the agent is notified."
-        >
-          <ActionForm
-            action={adjustBalanceAction}
-            resetOnSuccess
-            className="space-y-4"
-            confirm="Apply this balance adjustment?"
+        {superAdmin ? (
+          <Card
+            title="Profile & commission"
+            description="Blocking an agent or changing their password signs them out everywhere."
           >
-            <input type="hidden" name="agentId" value={agent.id} />
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Select label="Direction" name="direction" defaultValue="credit">
-                <option value="credit">Credit (add)</option>
-                <option value="debit">Debit (deduct)</option>
-              </Select>
+            <ActionForm action={updateAgentAction} className="space-y-4">
+              <input type="hidden" name="agentId" value={agent.id} />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Full name" name="name" defaultValue={agent.name} />
+                <Field
+                  label="Email"
+                  name="email"
+                  type="email"
+                  defaultValue={agent.email}
+                />
+                <Select label="Status" name="status" defaultValue={agent.status}>
+                  <option value="ACTIVE">Active</option>
+                  <option value="PENDING">Pending approval</option>
+                  <option value="BLOCKED">Blocked</option>
+                </Select>
+                <Field
+                  label="Security deposit (USDT)"
+                  name="securityDepositUsdt"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  defaultValue={agent.securityDepositUsdt.toString()}
+                />
+                <Field
+                  label="Payin commission %"
+                  name="payinCommissionRate"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  defaultValue={agent.payinCommissionRate.toString()}
+                />
+                <Field
+                  label="Payout commission %"
+                  name="payoutCommissionRate"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  defaultValue={agent.payoutCommissionRate.toString()}
+                />
+              </div>
               <Field
-                label="Amount"
-                name="amount"
-                type="number"
-                step="0.01"
-                min="0.01"
-                required
-                placeholder="0.00"
+                label="Set a new password"
+                name="password"
+                type="password"
+                minLength={6}
+                placeholder="Leave blank to keep the current one"
               />
-            </div>
-            <Textarea
-              label="Reason"
-              name="reason"
-              required
-              rows={2}
-              placeholder="Why this adjustment is being made"
-            />
-            <SubmitButton variant="secondary">Apply adjustment</SubmitButton>
-          </ActionForm>
+              <Textarea
+                label="Internal notes"
+                name="notes"
+                defaultValue={agent.notes ?? ""}
+                rows={2}
+              />
+              <SubmitButton>Save changes</SubmitButton>
+            </ActionForm>
+          </Card>
+        ) : (
+          <Card title="Profile & commission">
+            <dl className="space-y-2 text-sm">
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted">Status</dt>
+                <dd>
+                  <StatusBadge status={agent.status} />
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted">Payin commission</dt>
+                <dd className="tabular font-semibold">
+                  {formatPercent(agent.payinCommissionRate.toString())}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted">Payout commission</dt>
+                <dd className="tabular font-semibold">
+                  {formatPercent(agent.payoutCommissionRate.toString())}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted">Security deposit</dt>
+                <dd className="tabular font-semibold">
+                  {agent.securityDepositUsdt.toString()} USDT
+                </dd>
+              </div>
+              {agent.notes ? (
+                <div className="pt-2">
+                  <dt className="text-muted">Notes</dt>
+                  <dd className="mt-1">{agent.notes}</dd>
+                </div>
+              ) : null}
+            </dl>
+            <p className="mt-4 rounded-lg bg-inset px-3 py-2 text-xs text-muted">
+              Changing agent data and commission rates is restricted to super
+              admins.
+            </p>
+          </Card>
+        )}
 
-          <div className="mt-6 border-t border-line pt-4">
-            <p className="label">Weekly earnings</p>
+        <Card
+          title={superAdmin ? "Adjust balance" : "Weekly earnings"}
+          description={
+            superAdmin
+              ? "For corrections only. Every adjustment is audited and the agent is notified."
+              : undefined
+          }
+        >
+          {superAdmin ? (
+            <ActionForm
+              action={adjustBalanceAction}
+              resetOnSuccess
+              className="space-y-4"
+              confirm="Apply this balance adjustment?"
+            >
+              <input type="hidden" name="agentId" value={agent.id} />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Select label="Direction" name="direction" defaultValue="credit">
+                  <option value="credit">Credit (add)</option>
+                  <option value="debit">Debit (deduct)</option>
+                </Select>
+                <Field
+                  label="Amount"
+                  name="amount"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  required
+                  placeholder="0.00"
+                />
+              </div>
+              <Textarea
+                label="Reason"
+                name="reason"
+                required
+                rows={2}
+                placeholder="Why this adjustment is being made"
+              />
+              <SubmitButton variant="secondary">Apply adjustment</SubmitButton>
+            </ActionForm>
+          ) : null}
+
+          <div className={superAdmin ? "mt-6 border-t border-line pt-4" : ""}>
+            {superAdmin ? <p className="label">Weekly earnings</p> : null}
             {earnings.every((week) => week.netEarnings === 0) ? (
               <p className="text-sm text-muted">No earnings in the last 6 weeks.</p>
             ) : (
@@ -243,52 +423,13 @@ export default async function AgentDetailPage({ params }: Params) {
 
       <div className="mt-6 space-y-6">
         <Card title="Bank accounts" description={`${banks.length} on file`}>
-          {banks.length === 0 ? (
-            <EmptyState>This agent has not added a bank account yet.</EmptyState>
-          ) : (
-            <Table head={["Bank", "Account", "UPI", "Limits", "Active", ""]}>
-              {banks.map((bank) => (
-                <tr key={bank.id}>
-                  <Td>
-                    <span className="font-medium text-ink">{bank.bankName}</span>
-                    <span className="block text-xs text-muted">
-                      {bank.accountHolder}
-                    </span>
-                  </Td>
-                  <Td>
-                    <span className="tabular text-xs text-muted">
-                      ***{bank.accountNumber.slice(-4)} · {bank.ifsc}
-                    </span>
-                  </Td>
-                  <Td>
-                    <span className="text-xs text-muted">{bank.upiId}</span>
-                  </Td>
-                  <Td numeric>
-                    <span className="text-xs text-muted">
-                      {formatInr(bank.amountLimit.toString())} · {bank.txnLimit} txns
-                    </span>
-                  </Td>
-                  <Td>
-                    {bank.isActive ? (
-                      <Badge tone="success">Active</Badge>
-                    ) : (
-                      <Badge>Off</Badge>
-                    )}
-                  </Td>
-                  <Td>
-                    <div className="flex justify-end">
-                      <ActionForm action={toggleBankAction} hideMessage>
-                        <input type="hidden" name="bankId" value={bank.id} />
-                        <SubmitButton variant="secondary" size="sm">
-                          {bank.isActive ? "Turn off" : "Turn on"}
-                        </SubmitButton>
-                      </ActionForm>
-                    </div>
-                  </Td>
-                </tr>
-              ))}
-            </Table>
-          )}
+          <DataTable
+            columns={bankColumns}
+            rows={banks}
+            rowKey={(bank) => bank.id}
+            empty="This agent has not added a bank account yet."
+            minWidth="48rem"
+          />
         </Card>
 
         <Card
@@ -302,34 +443,12 @@ export default async function AgentDetailPage({ params }: Params) {
             </Link>
           }
         >
-          {payins.length === 0 ? (
-            <EmptyState>No payins yet.</EmptyState>
-          ) : (
-            <Table
-              head={["Reference", "Amount", "Commission", "After balance", "When"]}
-            >
-              {payins.map((payin) => (
-                <tr key={payin.id}>
-                  <Td>
-                    <Reference>{payin.reference}</Reference>
-                    <span className="block text-xs text-muted">{payin.txnRef}</span>
-                  </Td>
-                  <Td numeric>
-                    <Money value={payin.amount.toString()} />
-                  </Td>
-                  <Td numeric>
-                    <Money value={payin.commission.toString()} tone="success" />
-                  </Td>
-                  <Td numeric>
-                    <Money value={payin.afterBalance.toString()} tone="muted" />
-                  </Td>
-                  <Td>
-                    <DateTime value={payin.createdAt} />
-                  </Td>
-                </tr>
-              ))}
-            </Table>
-          )}
+          <DataTable
+            columns={payinColumns}
+            rows={payins}
+            rowKey={(payin) => payin.id}
+            empty="No payins yet."
+          />
         </Card>
 
         <Card
@@ -343,32 +462,12 @@ export default async function AgentDetailPage({ params }: Params) {
             </Link>
           }
         >
-          {payouts.length === 0 ? (
-            <EmptyState>No payouts yet.</EmptyState>
-          ) : (
-            <Table head={["Reference", "Status", "Amount", "Commission", "When"]}>
-              {payouts.map((payout) => (
-                <tr key={payout.id}>
-                  <Td>
-                    <Reference>{payout.reference}</Reference>
-                    <span className="block text-xs text-muted">{payout.upiId}</span>
-                  </Td>
-                  <Td>
-                    <StatusBadge status={payout.status} />
-                  </Td>
-                  <Td numeric>
-                    <Money value={payout.amount.toString()} />
-                  </Td>
-                  <Td numeric>
-                    <Money value={payout.commission.toString()} tone="success" />
-                  </Td>
-                  <Td>
-                    <DateTime value={payout.createdAt} />
-                  </Td>
-                </tr>
-              ))}
-            </Table>
-          )}
+          <DataTable
+            columns={payoutColumns}
+            rows={payouts}
+            rowKey={(payout) => payout.id}
+            empty="No payouts yet."
+          />
         </Card>
 
         <Card
@@ -382,31 +481,12 @@ export default async function AgentDetailPage({ params }: Params) {
             </Link>
           }
         >
-          {deposits.length === 0 ? (
-            <EmptyState>No deposits yet.</EmptyState>
-          ) : (
-            <Table head={["Reference", "Status", "Amount", "UTR", "When"]}>
-              {deposits.map((deposit) => (
-                <tr key={deposit.id}>
-                  <Td>
-                    <Reference>{deposit.reference}</Reference>
-                  </Td>
-                  <Td>
-                    <StatusBadge status={deposit.status} />
-                  </Td>
-                  <Td numeric>
-                    <Money value={deposit.amount.toString()} />
-                  </Td>
-                  <Td>
-                    <span className="tabular text-xs text-muted">{deposit.utr}</span>
-                  </Td>
-                  <Td>
-                    <DateTime value={deposit.createdAt} />
-                  </Td>
-                </tr>
-              ))}
-            </Table>
-          )}
+          <DataTable
+            columns={depositColumns}
+            rows={deposits}
+            rowKey={(deposit) => deposit.id}
+            empty="No deposits yet."
+          />
         </Card>
       </div>
     </>

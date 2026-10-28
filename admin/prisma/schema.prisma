@@ -135,6 +135,9 @@ model Payin {
   status          TxnStatus @default(COMPLETED)
   createdById     String?
   createdAt       DateTime  @default(now())
+  /// Set when a super admin corrects the record; see operations.updatePayin.
+  /// The default lets the column be added to a table that already has rows.
+  updatedAt       DateTime  @default(now()) @updatedAt
 
   agent       Agent        @relation(fields: [agentId], references: [id], onDelete: Cascade)
   bankAccount BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)

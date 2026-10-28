@@ -1,4 +1,4 @@
-import { requireAdmin, revokeAllRefreshTokens } from "@/lib/auth";
+import { requireAdmin, requireSuperAdmin, revokeAllRefreshTokens } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { prisma } from "@/lib/db";
 import { ApiError } from "@/lib/errors";
@@ -74,7 +74,7 @@ export const GET = withRoute(async (_request: Request, { params }: Params) => {
  * records a reason and an audit entry.
  */
 export const PATCH = withRoute(async (request: Request, { params }: Params) => {
-  const admin = await requireAdmin();
+  const admin = await requireSuperAdmin();
   const { id } = await params;
   const body = await readBody(request, updateAgentSchema);
 

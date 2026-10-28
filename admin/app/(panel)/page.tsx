@@ -1,22 +1,22 @@
 import Link from "next/link";
+import type { Prisma } from "@prisma/client";
 import {
   approveDepositAction,
   failPayoutAction,
   rejectDepositAction,
   settlePayoutAction,
 } from "@/app/actions";
+import { AutoRefresh } from "@/components/auto-refresh";
+import { DataTable, type Column } from "@/components/data-table";
 import { ActionForm, SubmitButton } from "@/components/form";
 import {
   AgentCell,
   Card,
   DateTime,
-  EmptyState,
   Money,
   PageHeader,
   Reference,
   StatTile,
-  Table,
-  Td,
 } from "@/components/ui";
 import { prisma } from "@/lib/db";
 import { formatInr, formatPercent } from "@/lib/money";
@@ -27,6 +27,10 @@ export const metadata = { title: "Dashboard · 1XBET Agent Admin" };
 const agentSelect = {
   select: { id: true, name: true, mobile: true, status: true },
 } as const;
+
+type Deposit = Prisma.DepositGetPayload<{ include: { agent: typeof agentSelect } }>;
+type Payout = Prisma.PayoutGetPayload<{ include: { agent: typeof agentSelect } }>;
+type Payin = Prisma.PayinGetPayload<{ include: { agent: typeof agentSelect } }>;
 
 export default async function DashboardPage() {
   const [overview, pendingDeposits, reportedPayouts, recentPayins] =
@@ -51,8 +55,146 @@ export default async function DashboardPage() {
       }),
     ]);
 
+  const depositColumns: Column<Deposit>[] = [
+    {
+      header: "Reference",
+      primary: true,
+      cell: (deposit) => <Reference>{deposit.reference}</Reference>,
+    },
+    { header: "Agent", cell: (deposit) => <AgentCell agent={deposit.agent} /> },
+    {
+      header: "Amount",
+      numeric: true,
+      cell: (deposit) => <Money value={deposit.amount.toString()} />,
+    },
+    {
+      header: "UTR",
+      cell: (deposit) => (
+        <span className="tabular text-xs text-muted">{deposit.utr}</span>
+      ),
+    },
+    {
+      header: "Submitted",
+      tableOnly: true,
+      cell: (deposit) => <DateTime value={deposit.createdAt} />,
+    },
+    {
+      header: "",
+      actions: true,
+      cell: (deposit) => (
+        <>
+          <ActionForm
+            action={approveDepositAction}
+            hideMessage
+            confirm={`Approve ${deposit.reference} and credit ${formatInr(
+              deposit.amount.toString(),
+            )}?`}
+          >
+            <input type="hidden" name="depositId" value={deposit.id} />
+            <SubmitButton variant="success" size="sm">
+              Approve
+            </SubmitButton>
+          </ActionForm>
+          <ActionForm
+            action={rejectDepositAction}
+            hideMessage
+            confirm={`Reject ${deposit.reference}?`}
+          >
+            <input type="hidden" name="depositId" value={deposit.id} />
+            <SubmitButton variant="secondary" size="sm">
+              Reject
+            </SubmitButton>
+          </ActionForm>
+        </>
+      ),
+    },
+  ];
+
+  const payoutColumns: Column<Payout>[] = [
+    {
+      header: "Reference",
+      primary: true,
+      cell: (payout) => <Reference>{payout.reference}</Reference>,
+    },
+    { header: "Agent", cell: (payout) => <AgentCell agent={payout.agent} /> },
+    {
+      header: "Amount",
+      numeric: true,
+      cell: (payout) => (
+        <div>
+          <Money value={payout.amount.toString()} />
+          <span className="block text-xs text-success">
+            +{formatInr(payout.commission.toString())}
+          </span>
+        </div>
+      ),
+    },
+    {
+      header: "Pay to",
+      cell: (payout) => <span className="text-xs text-muted">{payout.upiId}</span>,
+    },
+    {
+      header: "Reported",
+      tableOnly: true,
+      cell: (payout) => <DateTime value={payout.paidAt} />,
+    },
+    {
+      header: "",
+      actions: true,
+      cell: (payout) => (
+        <>
+          <ActionForm
+            action={settlePayoutAction}
+            hideMessage
+            confirm={`Confirm ${payout.reference} and credit the agent ${formatInr(
+              payout.amount.add(payout.commission).toString(),
+            )}?`}
+          >
+            <input type="hidden" name="payoutId" value={payout.id} />
+            <SubmitButton variant="success" size="sm">
+              Settle
+            </SubmitButton>
+          </ActionForm>
+          <ActionForm
+            action={failPayoutAction}
+            hideMessage
+            confirm={`Mark ${payout.reference} failed?`}
+          >
+            <input type="hidden" name="payoutId" value={payout.id} />
+            <SubmitButton variant="secondary" size="sm">
+              Fail
+            </SubmitButton>
+          </ActionForm>
+        </>
+      ),
+    },
+  ];
+
+  const payinColumns: Column<Payin>[] = [
+    {
+      header: "Reference",
+      primary: true,
+      cell: (payin) => <Reference>{payin.reference}</Reference>,
+    },
+    { header: "Agent", cell: (payin) => <AgentCell agent={payin.agent} /> },
+    {
+      header: "Amount",
+      numeric: true,
+      cell: (payin) => <Money value={payin.amount.toString()} />,
+    },
+    {
+      header: "Commission",
+      numeric: true,
+      cell: (payin) => (
+        <Money value={payin.commission.toString()} tone="success" />
+      ),
+    },
+    { header: "When", cell: (payin) => <DateTime value={payin.createdAt} /> },
+  ];
+
   return (
     <>
+      <AutoRefresh seconds={20} />
       <PageHeader
         title="Dashboard"
         subtitle="Money waiting on you, and how the network is doing today."
@@ -122,59 +264,12 @@ export default async function DashboardPage() {
             </Link>
           }
         >
-          {pendingDeposits.length === 0 ? (
-            <EmptyState>Nothing to review. The queue is clear.</EmptyState>
-          ) : (
-            <Table
-              head={["Reference", "Agent", "Amount", "UTR", "Submitted", ""]}
-            >
-              {pendingDeposits.map((deposit) => (
-                <tr key={deposit.id}>
-                  <Td>
-                    <Reference>{deposit.reference}</Reference>
-                  </Td>
-                  <Td>
-                    <AgentCell agent={deposit.agent} />
-                  </Td>
-                  <Td numeric>
-                    <Money value={deposit.amount.toString()} />
-                  </Td>
-                  <Td>
-                    <span className="tabular text-xs text-muted">{deposit.utr}</span>
-                  </Td>
-                  <Td>
-                    <DateTime value={deposit.createdAt} />
-                  </Td>
-                  <Td>
-                    <div className="flex justify-end gap-2">
-                      <ActionForm
-                        action={approveDepositAction}
-                        hideMessage
-                        confirm={`Approve ${deposit.reference} and credit ${formatInr(
-                          deposit.amount.toString(),
-                        )}?`}
-                      >
-                        <input type="hidden" name="depositId" value={deposit.id} />
-                        <SubmitButton variant="success" size="sm">
-                          Approve
-                        </SubmitButton>
-                      </ActionForm>
-                      <ActionForm
-                        action={rejectDepositAction}
-                        hideMessage
-                        confirm={`Reject ${deposit.reference}?`}
-                      >
-                        <input type="hidden" name="depositId" value={deposit.id} />
-                        <SubmitButton variant="secondary" size="sm">
-                          Reject
-                        </SubmitButton>
-                      </ActionForm>
-                    </div>
-                  </Td>
-                </tr>
-              ))}
-            </Table>
-          )}
+          <DataTable
+            columns={depositColumns}
+            rows={pendingDeposits}
+            rowKey={(deposit) => deposit.id}
+            empty="Nothing to review. The queue is clear."
+          />
         </Card>
 
         <Card
@@ -189,60 +284,12 @@ export default async function DashboardPage() {
             </Link>
           }
         >
-          {reportedPayouts.length === 0 ? (
-            <EmptyState>No payouts are waiting on a confirmation.</EmptyState>
-          ) : (
-            <Table head={["Reference", "Agent", "Amount", "Pay to", "Reported", ""]}>
-              {reportedPayouts.map((payout) => (
-                <tr key={payout.id}>
-                  <Td>
-                    <Reference>{payout.reference}</Reference>
-                  </Td>
-                  <Td>
-                    <AgentCell agent={payout.agent} />
-                  </Td>
-                  <Td numeric>
-                    <Money value={payout.amount.toString()} />
-                    <span className="block text-xs text-success">
-                      +{formatInr(payout.commission.toString())}
-                    </span>
-                  </Td>
-                  <Td>
-                    <span className="text-xs text-muted">{payout.upiId}</span>
-                  </Td>
-                  <Td>
-                    <DateTime value={payout.paidAt} />
-                  </Td>
-                  <Td>
-                    <div className="flex justify-end gap-2">
-                      <ActionForm
-                        action={settlePayoutAction}
-                        hideMessage
-                        confirm={`Confirm ${payout.reference} and credit the agent ${formatInr(
-                          payout.amount.add(payout.commission).toString(),
-                        )}?`}
-                      >
-                        <input type="hidden" name="payoutId" value={payout.id} />
-                        <SubmitButton variant="success" size="sm">
-                          Settle
-                        </SubmitButton>
-                      </ActionForm>
-                      <ActionForm
-                        action={failPayoutAction}
-                        hideMessage
-                        confirm={`Mark ${payout.reference} failed?`}
-                      >
-                        <input type="hidden" name="payoutId" value={payout.id} />
-                        <SubmitButton variant="secondary" size="sm">
-                          Fail
-                        </SubmitButton>
-                      </ActionForm>
-                    </div>
-                  </Td>
-                </tr>
-              ))}
-            </Table>
-          )}
+          <DataTable
+            columns={payoutColumns}
+            rows={reportedPayouts}
+            rowKey={(payout) => payout.id}
+            empty="No payouts are waiting on a confirmation."
+          />
         </Card>
 
         <Card
@@ -256,31 +303,12 @@ export default async function DashboardPage() {
             </Link>
           }
         >
-          {recentPayins.length === 0 ? (
-            <EmptyState>No payins recorded yet.</EmptyState>
-          ) : (
-            <Table head={["Reference", "Agent", "Amount", "Commission", "When"]}>
-              {recentPayins.map((payin) => (
-                <tr key={payin.id}>
-                  <Td>
-                    <Reference>{payin.reference}</Reference>
-                  </Td>
-                  <Td>
-                    <AgentCell agent={payin.agent} />
-                  </Td>
-                  <Td numeric>
-                    <Money value={payin.amount.toString()} />
-                  </Td>
-                  <Td numeric>
-                    <Money value={payin.commission.toString()} tone="success" />
-                  </Td>
-                  <Td>
-                    <DateTime value={payin.createdAt} />
-                  </Td>
-                </tr>
-              ))}
-            </Table>
-          )}
+          <DataTable
+            columns={payinColumns}
+            rows={recentPayins}
+            rowKey={(payin) => payin.id}
+            empty="No payins recorded yet."
+          />
         </Card>
       </div>
     </>

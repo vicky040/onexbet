@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import {
   clearAdminCookie,
   requireAdmin,
+  requireSuperAdmin,
   revokeAllRefreshTokens,
   setAdminCookie,
 } from "@/lib/auth";
@@ -21,17 +22,23 @@ import {
   rejectDeposit,
   sendNotification,
   settlePayout,
+  updatePayin,
+  updatePayoutAmounts,
 } from "@/lib/operations";
 import { signAdminSession } from "@/lib/tokens";
 import {
   adjustBalanceSchema,
   adminLoginSchema,
   adminReplySchema,
+  createAdminSchema,
   createAgentSchema,
   createPayinSchema,
   createPayoutSchema,
   sendNotificationSchema,
+  updateAdminSchema,
   updateAgentSchema,
+  updatePayinSchema,
+  updatePayoutAmountsSchema,
   updateSettingsSchema,
 } from "@/lib/validation";
 import { ZodError } from "zod";
@@ -291,7 +298,7 @@ export async function createAgentAction(
   form: FormData,
 ): Promise<ActionState> {
   return run(async () => {
-    const admin = await requireAdmin();
+    const admin = await requireSuperAdmin();
     const settings = await getSettings();
     const body = createAgentSchema.parse({
       name: form.get("name"),
@@ -354,7 +361,7 @@ export async function updateAgentAction(
   form: FormData,
 ): Promise<ActionState> {
   return run(async () => {
-    const admin = await requireAdmin();
+    const admin = await requireSuperAdmin();
     const agentId = str(form, "agentId");
     if (!agentId) throw ApiError.badRequest("Missing agent");
 
@@ -416,7 +423,7 @@ export async function adjustBalanceAction(
   form: FormData,
 ): Promise<ActionState> {
   return run(async () => {
-    const admin = await requireAdmin();
+    const admin = await requireSuperAdmin();
     const agentId = str(form, "agentId");
     if (!agentId) throw ApiError.badRequest("Missing agent");
 
@@ -501,7 +508,7 @@ export async function updateSettingsAction(
   form: FormData,
 ): Promise<ActionState> {
   return run(async () => {
-    const admin = await requireAdmin();
+    const admin = await requireSuperAdmin();
     await getSettings();
 
     const body = updateSettingsSchema.parse({
@@ -539,7 +546,7 @@ export async function toggleBankAction(
   form: FormData,
 ): Promise<ActionState> {
   return run(async () => {
-    const admin = await requireAdmin();
+    const admin = await requireSuperAdmin();
     const bankId = str(form, "bankId");
     if (!bankId) throw ApiError.badRequest("Missing bank account");
 
@@ -562,4 +569,182 @@ export async function toggleBankAction(
 
     return `${bank.bankName} is now ${bank.isActive ? "active" : "inactive"}`;
   }, ["/banks", "/agents"]);
+}
+
+// ---------------------------------------------------------------------------
+// Panel users (super admin)
+// ---------------------------------------------------------------------------
+
+export async function createAdminAction(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  return run(async () => {
+    const actor = await requireSuperAdmin();
+    const body = createAdminSchema.parse({
+      name: form.get("name"),
+      email: form.get("email"),
+      password: form.get("password"),
+      role: str(form, "role"),
+    });
+    const email = body.email.toLowerCase();
+
+    const existing = await prisma.admin.findUnique({
+      where: { email },
+      select: { id: true },
+    });
+    if (existing) {
+      throw ApiError.conflict("An admin with this email already exists");
+    }
+
+    const created = await prisma.admin.create({
+      data: {
+        name: body.name,
+        email,
+        passwordHash: await hashPassword(body.password),
+        role: body.role ?? "OPERATOR",
+      },
+    });
+
+    await writeAudit({
+      adminId: actor.id,
+      action: "admin.create",
+      entity: "Admin",
+      entityId: created.id,
+      summary: `Created ${created.role === "SUPER_ADMIN" ? "super admin" : "operator"} ${created.email}`,
+      meta: { role: created.role },
+    });
+
+    return `${created.email} can now sign in`;
+  }, ["/admins"]);
+}
+
+export async function updateAdminAction(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  return run(async () => {
+    const actor = await requireSuperAdmin();
+    const adminId = str(form, "adminId");
+    if (!adminId) throw ApiError.badRequest("Missing admin");
+
+    const rawActive = form.get("isActive");
+    const body = updateAdminSchema.parse({
+      name: str(form, "name"),
+      role: str(form, "role"),
+      isActive: rawActive === null ? undefined : rawActive === "true",
+      password: str(form, "password"),
+    });
+
+    const target = await prisma.admin.findUnique({ where: { id: adminId } });
+    if (!target) throw ApiError.notFound("Admin");
+
+    const removesAccess = body.role === "OPERATOR" || body.isActive === false;
+
+    if (target.id === actor.id && removesAccess) {
+      throw ApiError.badRequest(
+        "You cannot remove your own access. Ask another super admin to do it.",
+      );
+    }
+
+    if (target.role === "SUPER_ADMIN" && removesAccess) {
+      const remaining = await prisma.admin.count({
+        where: { role: "SUPER_ADMIN", isActive: true, id: { not: target.id } },
+      });
+      if (remaining === 0) {
+        throw ApiError.conflict(
+          "This is the only active super admin. Promote someone else first.",
+        );
+      }
+    }
+
+    const updated = await prisma.admin.update({
+      where: { id: adminId },
+      data: {
+        name: body.name,
+        role: body.role,
+        isActive: body.isActive,
+        ...(body.password
+          ? { passwordHash: await hashPassword(body.password) }
+          : {}),
+      },
+    });
+
+    const changed = Object.keys(body).filter(
+      (key) => body[key as keyof typeof body] !== undefined,
+    );
+
+    await writeAudit({
+      adminId: actor.id,
+      action: "admin.update",
+      entity: "Admin",
+      entityId: adminId,
+      summary: `Updated ${updated.email} (${changed.join(", ")})`,
+      meta: { fields: changed, role: updated.role, isActive: updated.isActive },
+    });
+
+    return `${updated.email} updated`;
+  }, ["/admins"]);
+}
+
+// ---------------------------------------------------------------------------
+// Corrections (super admin)
+// ---------------------------------------------------------------------------
+
+export async function updatePayinAction(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  return run(async () => {
+    const admin = await requireSuperAdmin();
+    const payinId = str(form, "payinId");
+    if (!payinId) throw ApiError.badRequest("Missing payin");
+
+    const body = updatePayinSchema.parse({
+      amount: str(form, "amount"),
+      commissionRate: str(form, "commissionRate"),
+      txnRef: str(form, "txnRef"),
+      reason: form.get("reason"),
+    });
+
+    const payin = await updatePayin({
+      payinId,
+      amount: body.amount,
+      commissionRate: body.commissionRate,
+      txnRef: body.txnRef,
+      reason: body.reason,
+      adminId: admin.id,
+    });
+
+    return `Corrected ${payin.reference}`;
+  }, ["/payins", "/", "/agents"]);
+}
+
+export async function updatePayoutAmountsAction(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  return run(async () => {
+    const admin = await requireSuperAdmin();
+    const payoutId = str(form, "payoutId");
+    if (!payoutId) throw ApiError.badRequest("Missing payout");
+
+    const body = updatePayoutAmountsSchema.parse({
+      amount: str(form, "amount"),
+      commissionRate: str(form, "commissionRate"),
+      upiId: str(form, "upiId"),
+      reason: form.get("reason"),
+    });
+
+    const payout = await updatePayoutAmounts({
+      payoutId,
+      amount: body.amount,
+      commissionRate: body.commissionRate,
+      upiId: body.upiId,
+      reason: body.reason,
+      adminId: admin.id,
+    });
+
+    return `Corrected ${payout.reference}`;
+  }, ["/payouts", "/", "/agents"]);
 }

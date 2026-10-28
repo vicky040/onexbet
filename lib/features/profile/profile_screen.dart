@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/router/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
@@ -38,6 +40,16 @@ class ProfileScreen extends ConsumerWidget {
     );
     if (confirmed == true) {
       await ref.read(authControllerProvider.notifier).logout();
+    }
+  }
+
+  /// Opens the APK in the browser or download manager. A failure is reported
+  /// rather than leaving the tap looking ignored.
+  Future<void> _downloadAndroidApp(BuildContext context) async {
+    final uri = Uri.parse(AppConfig.androidApkUrl);
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && context.mounted) {
+      showMessage(context, 'Could not start the download. Please try again.');
     }
   }
 
@@ -136,6 +148,12 @@ class ProfileScreen extends ConsumerWidget {
                     label: 'Help & support',
                     onTap: () => context.push(Routes.support),
                   ),
+                  if (AppConfig.hasAndroidDownload)
+                    _SettingsTile(
+                      icon: Icons.android_rounded,
+                      label: 'Download Android app',
+                      onTap: () => _downloadAndroidApp(context),
+                    ),
                   _SettingsTile(
                     icon: Icons.logout_rounded,
                     label: 'Log out',

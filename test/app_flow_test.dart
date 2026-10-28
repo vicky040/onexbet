@@ -138,4 +138,32 @@ void main() {
     expect(find.text('Password updated. Please log in.'), findsOneWidget);
     expect(find.text('Welcome back'), findsOneWidget);
   });
+
+  testWidgets('support chat shows an admin reply without leaving the screen',
+      (tester) async {
+    final inbox = FakeInboxRepository();
+    await pumpApp(tester, loggedIn: true, inbox: inbox);
+
+    // The help card sits below the fold on a phone.
+    final helpCard = find.text('Need help? Chat with our support team');
+    await tester.scrollUntilVisible(helpCard, 200);
+    await tester.pumpAndSettle();
+    await tester.tap(helpCard);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Hi! Welcome to 1XBET agent support. How can we help you today?'),
+      findsOneWidget,
+    );
+    expect(find.text('Reply sent from the admin panel'), findsNothing);
+
+    // The admin answers. The agent is still sitting on the screen, which is
+    // exactly the case that used to show nothing until you navigated away.
+    inbox.addSupportReply('Reply sent from the admin panel');
+
+    await tester.pump(const Duration(seconds: 6));
+    await tester.pump();
+
+    expect(find.text('Reply sent from the admin panel'), findsOneWidget);
+  });
 }

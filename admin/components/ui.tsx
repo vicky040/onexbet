@@ -171,64 +171,6 @@ export function StatusBadge({ status }: { status: string }) {
   );
 }
 
-export function Table({
-  head,
-  children,
-  empty,
-}: {
-  head: ReactNode[];
-  children: ReactNode;
-  empty?: string;
-}) {
-  const hasRows = Array.isArray(children)
-    ? children.length > 0
-    : Boolean(children);
-
-  if (!hasRows && empty) return <EmptyState>{empty}</EmptyState>;
-
-  return (
-    <div className="-mx-5 overflow-x-auto">
-      <table className="w-full min-w-[42rem] border-collapse text-sm">
-        <thead>
-          <tr className="border-b border-line text-left">
-            {head.map((cell, index) => (
-              <th
-                key={index}
-                className="px-5 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted"
-              >
-                {cell}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-line">{children}</tbody>
-      </table>
-    </div>
-  );
-}
-
-export function Td({
-  children,
-  className,
-  numeric,
-}: {
-  children: ReactNode;
-  className?: string;
-  numeric?: boolean;
-}) {
-  return (
-    <td
-      className={clsx(
-        "px-5 py-3 align-middle",
-        numeric && "tabular whitespace-nowrap",
-        className,
-      )}
-    >
-      {children}
-    </td>
-  );
-}
-
 export function EmptyState({ children }: { children: ReactNode }) {
   return (
     <div className="rounded-xl border border-dashed border-line bg-inset px-6 py-10 text-center text-sm text-muted">

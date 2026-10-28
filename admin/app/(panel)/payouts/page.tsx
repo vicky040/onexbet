@@ -1,10 +1,13 @@
+import Link from "next/link";
 import type { Prisma } from "@prisma/client";
 import {
   createPayoutAction,
   failPayoutAction,
   releasePayoutAction,
   settlePayoutAction,
+  updatePayoutAmountsAction,
 } from "@/app/actions";
+import { DataTable, type Column } from "@/components/data-table";
 import {
   ActionForm,
   Disclosure,
@@ -24,9 +27,8 @@ import {
   Reference,
   StatTile,
   StatusBadge,
-  Table,
-  Td,
 } from "@/components/ui";
+import { isSuperAdmin } from "@/lib/auth";
 import { getSettings, prisma } from "@/lib/db";
 import { formatInr, toNumber } from "@/lib/money";
 
@@ -43,6 +45,12 @@ const STATUSES = [
   "CANCELLED",
 ];
 
+type Payout = Prisma.PayoutGetPayload<{
+  include: {
+    agent: { select: { id: true; name: true; mobile: true; status: true } };
+  };
+}>;
+
 export default async function PayoutsPage({
   searchParams,
 }: {
@@ -51,12 +59,14 @@ export default async function PayoutsPage({
     status?: string;
     agentId?: string;
     page?: string;
+    correct?: string;
   }>;
 }) {
   const params = await searchParams;
   const page = Math.max(1, Number(params.page ?? 1) || 1);
   const status = params.status?.toUpperCase();
   const q = params.q?.trim();
+  const superAdmin = await isSuperAdmin();
 
   const where: Prisma.PayoutWhereInput = {
     ...(status && STATUSES.includes(status)
@@ -73,7 +83,7 @@ export default async function PayoutsPage({
       : {}),
   };
 
-  const [payouts, total, open, awaiting, settled, agents, settings] =
+  const [payouts, total, open, awaiting, settled, agents, settings, correcting] =
     await Promise.all([
       prisma.payout.findMany({
         where,
@@ -102,7 +112,102 @@ export default async function PayoutsPage({
         orderBy: { name: "asc" },
       }),
       getSettings(),
+      superAdmin && params.correct
+        ? prisma.payout.findUnique({ where: { id: params.correct } })
+        : null,
     ]);
+
+  const columns: Column<Payout>[] = [
+    {
+      header: "Reference",
+      primary: true,
+      cell: (payout) => (
+        <div>
+          <Reference>{payout.reference}</Reference>
+          {payout.note ? (
+            <span className="block truncate text-xs text-muted">{payout.note}</span>
+          ) : null}
+        </div>
+      ),
+    },
+    { header: "Agent", cell: (payout) => <AgentCell agent={payout.agent} /> },
+    {
+      header: "Amount",
+      numeric: true,
+      cell: (payout) => (
+        <div>
+          <Money value={payout.amount.toString()} />
+          <span className="block text-xs text-success">
+            +{formatInr(payout.commission.toString())}
+          </span>
+        </div>
+      ),
+    },
+    {
+      header: "Pay to",
+      cell: (payout) => <span className="text-xs text-muted">{payout.upiId}</span>,
+    },
+    { header: "Status", cell: (payout) => <StatusBadge status={payout.status} /> },
+    { header: "Created", cell: (payout) => <DateTime value={payout.createdAt} /> },
+    {
+      header: "",
+      actions: true,
+      cell: (payout) => (
+        <>
+          {(payout.status === "PAYMENT_RECEIVED" || payout.status === "ACCEPTED") &&
+          payout.agentId ? (
+            <ActionForm
+              action={settlePayoutAction}
+              hideMessage
+              confirm={`Settle ${payout.reference} and credit ${formatInr(
+                payout.amount.add(payout.commission).toString(),
+              )}?`}
+            >
+              <input type="hidden" name="payoutId" value={payout.id} />
+              <SubmitButton variant="success" size="sm">
+                Settle
+              </SubmitButton>
+            </ActionForm>
+          ) : null}
+
+          {payout.status !== "COMPLETED" && payout.status !== "FAILED" ? (
+            <ActionForm
+              action={failPayoutAction}
+              hideMessage
+              confirm={`Mark ${payout.reference} failed?`}
+            >
+              <input type="hidden" name="payoutId" value={payout.id} />
+              <SubmitButton variant="secondary" size="sm">
+                Fail
+              </SubmitButton>
+            </ActionForm>
+          ) : null}
+
+          {payout.agentId && payout.status !== "COMPLETED" ? (
+            <ActionForm
+              action={releasePayoutAction}
+              hideMessage
+              confirm={`Release ${payout.reference} back to the pool?`}
+            >
+              <input type="hidden" name="payoutId" value={payout.id} />
+              <SubmitButton variant="ghost" size="sm">
+                Release
+              </SubmitButton>
+            </ActionForm>
+          ) : null}
+
+          {superAdmin ? (
+            <Link
+              href={`/payouts?correct=${payout.id}`}
+              className="px-2 py-1.5 text-xs font-semibold text-sky hover:underline"
+            >
+              Correct
+            </Link>
+          ) : null}
+        </>
+      ),
+    },
+  ];
 
   return (
     <>
@@ -131,6 +236,67 @@ export default async function PayoutsPage({
           )} commission`}
         />
       </div>
+
+      {correcting ? (
+        <div className="mt-6">
+          <Card
+            title={`Correct ${correcting.reference}`}
+            description={
+              correcting.status === "COMPLETED"
+                ? "This payout is settled, so the difference will be applied to the agent's balance."
+                : "This payout has not been settled, so no balance moves."
+            }
+            actions={
+              <Link
+                href="/payouts"
+                className="text-xs font-semibold text-muted hover:text-navy hover:underline"
+              >
+                Cancel
+              </Link>
+            }
+          >
+            <ActionForm
+              action={updatePayoutAmountsAction}
+              className="space-y-4"
+              confirm="Apply this correction?"
+            >
+              <input type="hidden" name="payoutId" value={correcting.id} />
+              <div className="grid gap-4 sm:grid-cols-3">
+                <Field
+                  label="Amount"
+                  name="amount"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  defaultValue={correcting.amount.toString()}
+                />
+                <Field
+                  label="Commission %"
+                  name="commissionRate"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  defaultValue={correcting.commissionRate.toString()}
+                />
+                <Field
+                  label="Pay to UPI"
+                  name="upiId"
+                  defaultValue={correcting.upiId}
+                />
+              </div>
+              <Textarea
+                label="Reason"
+                name="reason"
+                required
+                rows={2}
+                placeholder="Why this record is being corrected"
+              />
+              <SubmitButton>Apply correction</SubmitButton>
+            </ActionForm>
+          </Card>
+        </div>
+      ) : null}
 
       <div className="mt-6 mb-6">
         <Disclosure summary="Create a payout">
@@ -211,87 +377,13 @@ export default async function PayoutsPage({
           ) : null}
         </FilterBar>
 
-        <Table
-          head={["Reference", "Agent", "Amount", "Pay to", "Status", "When", ""]}
+        <DataTable
+          columns={columns}
+          rows={payouts}
+          rowKey={(payout) => payout.id}
           empty="No payouts match this filter."
-        >
-          {payouts.map((payout) => (
-            <tr key={payout.id} className="hover:bg-inset/60">
-              <Td>
-                <Reference>{payout.reference}</Reference>
-                {payout.note ? (
-                  <span className="block max-w-48 truncate text-xs text-muted">
-                    {payout.note}
-                  </span>
-                ) : null}
-              </Td>
-              <Td>
-                <AgentCell agent={payout.agent} />
-              </Td>
-              <Td numeric>
-                <Money value={payout.amount.toString()} />
-                <span className="block text-xs text-success">
-                  +{formatInr(payout.commission.toString())}
-                </span>
-              </Td>
-              <Td>
-                <span className="text-xs text-muted">{payout.upiId}</span>
-              </Td>
-              <Td>
-                <StatusBadge status={payout.status} />
-              </Td>
-              <Td>
-                <DateTime value={payout.createdAt} />
-              </Td>
-              <Td>
-                <div className="flex flex-wrap justify-end gap-2">
-                  {(payout.status === "PAYMENT_RECEIVED" ||
-                    payout.status === "ACCEPTED") &&
-                  payout.agentId ? (
-                    <ActionForm
-                      action={settlePayoutAction}
-                      hideMessage
-                      confirm={`Settle ${payout.reference} and credit ${formatInr(
-                        payout.amount.add(payout.commission).toString(),
-                      )}?`}
-                    >
-                      <input type="hidden" name="payoutId" value={payout.id} />
-                      <SubmitButton variant="success" size="sm">
-                        Settle
-                      </SubmitButton>
-                    </ActionForm>
-                  ) : null}
-
-                  {payout.status !== "COMPLETED" && payout.status !== "FAILED" ? (
-                    <ActionForm
-                      action={failPayoutAction}
-                      hideMessage
-                      confirm={`Mark ${payout.reference} failed?`}
-                    >
-                      <input type="hidden" name="payoutId" value={payout.id} />
-                      <SubmitButton variant="secondary" size="sm">
-                        Fail
-                      </SubmitButton>
-                    </ActionForm>
-                  ) : null}
-
-                  {payout.agentId && payout.status !== "COMPLETED" ? (
-                    <ActionForm
-                      action={releasePayoutAction}
-                      hideMessage
-                      confirm={`Release ${payout.reference} back to the pool?`}
-                    >
-                      <input type="hidden" name="payoutId" value={payout.id} />
-                      <SubmitButton variant="ghost" size="sm">
-                        Release
-                      </SubmitButton>
-                    </ActionForm>
-                  ) : null}
-                </div>
-              </Td>
-            </tr>
-          ))}
-        </Table>
+          minWidth="52rem"
+        />
 
         <Pagination
           page={page}

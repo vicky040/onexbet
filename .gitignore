@@ -49,3 +49,6 @@ app.*.map.json
 
 .vercel
 .env*
+
+# Release APK served by the web build; too large for git (see DEPLOY.md).
+web/downloads/

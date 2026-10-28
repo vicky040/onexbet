@@ -173,6 +173,20 @@ class SupportChatController extends AsyncNotifier<List<ChatMessage>> {
   Future<List<ChatMessage>> build() =>
       ref.watch(inboxRepositoryProvider).supportMessages();
 
+  /// Re-reads the conversation without flashing the loading state, so the
+  /// chat can poll for support's replies while the agent is looking at it.
+  /// A failure is swallowed: a dropped poll must not replace a readable
+  /// conversation with an error screen.
+  Future<void> refresh() async {
+    try {
+      state = AsyncData(
+        await ref.read(inboxRepositoryProvider).supportMessages(),
+      );
+    } catch (_) {
+      // Keep whatever is on screen.
+    }
+  }
+
   Future<void> send(String text) async {
     final pending = ChatMessage(
       id: 'pending',

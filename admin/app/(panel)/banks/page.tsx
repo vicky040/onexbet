@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { toggleBankAction } from "@/app/actions";
+import { DataTable, type Column } from "@/components/data-table";
 import { ActionForm, SubmitButton } from "@/components/form";
 import {
   AgentCell,
@@ -10,15 +11,20 @@ import {
   PageHeader,
   Pagination,
   StatTile,
-  Table,
-  Td,
 } from "@/components/ui";
+import { isSuperAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { formatInr } from "@/lib/money";
 
 export const metadata = { title: "Bank accounts · 1XBET Agent Admin" };
 
 const PER_PAGE = 25;
+
+type BankAccount = Prisma.BankAccountGetPayload<{
+  include: {
+    agent: { select: { id: true; name: true; mobile: true; status: true } };
+  };
+}>;
 
 export default async function BanksPage({
   searchParams,
@@ -33,6 +39,7 @@ export default async function BanksPage({
   const params = await searchParams;
   const page = Math.max(1, Number(params.page ?? 1) || 1);
   const q = params.q?.trim();
+  const superAdmin = await isSuperAdmin();
 
   const where: Prisma.BankAccountWhereInput = {
     ...(params.agentId ? { agentId: params.agentId } : {}),
@@ -66,6 +73,66 @@ export default async function BanksPage({
     prisma.bankAccount.count({ where: { isActive: true } }),
     prisma.bankAccount.count(),
   ]);
+
+  const columns: Column<BankAccount>[] = [
+    {
+      header: "Bank",
+      primary: true,
+      cell: (bank) => (
+        <div>
+          <span className="font-semibold text-ink">{bank.bankName}</span>
+          <span className="block text-xs text-muted">{bank.accountHolder}</span>
+        </div>
+      ),
+    },
+    { header: "Agent", cell: (bank) => <AgentCell agent={bank.agent} /> },
+    {
+      header: "Account",
+      cell: (bank) => (
+        <div className="tabular text-xs text-muted">
+          <span>***{bank.accountNumber.slice(-4)}</span>
+          <span className="block">{bank.ifsc}</span>
+        </div>
+      ),
+    },
+    {
+      header: "UPI",
+      cell: (bank) => <span className="text-xs text-muted">{bank.upiId}</span>,
+    },
+    {
+      header: "Limits",
+      numeric: true,
+      cell: (bank) => (
+        <div className="text-xs text-muted">
+          <span>{formatInr(bank.amountLimit.toString())}</span>
+          <span className="block">
+            {bank.txnLimit} txns · daily {bank.dailyLimit}
+          </span>
+        </div>
+      ),
+    },
+    {
+      header: "State",
+      cell: (bank) =>
+        bank.isActive ? <Badge tone="success">Active</Badge> : <Badge>Off</Badge>,
+    },
+    { header: "Added", tableOnly: true, cell: (bank) => <DateTime value={bank.createdAt} /> },
+    {
+      header: "",
+      actions: true,
+      cell: (bank) =>
+        superAdmin ? (
+          <ActionForm action={toggleBankAction} hideMessage>
+            <input type="hidden" name="bankId" value={bank.id} />
+            <SubmitButton variant="secondary" size="sm">
+              {bank.isActive ? "Turn off" : "Turn on"}
+            </SubmitButton>
+          </ActionForm>
+        ) : (
+          <span className="text-xs text-muted">View only</span>
+        ),
+    },
+  ];
 
   return (
     <>
@@ -114,63 +181,13 @@ export default async function BanksPage({
             ) : null}
           </FilterBar>
 
-          <Table
-            head={["Bank", "Agent", "Account", "UPI", "Limits", "State", "Added", ""]}
+          <DataTable
+            columns={columns}
+            rows={banks}
+            rowKey={(bank) => bank.id}
             empty="No bank accounts match this filter."
-          >
-            {banks.map((bank) => (
-              <tr key={bank.id} className="hover:bg-inset/60">
-                <Td>
-                  <span className="font-medium text-ink">{bank.bankName}</span>
-                  <span className="block text-xs text-muted">
-                    {bank.accountHolder}
-                  </span>
-                </Td>
-                <Td>
-                  <AgentCell agent={bank.agent} />
-                </Td>
-                <Td>
-                  <span className="tabular text-xs text-muted">
-                    ***{bank.accountNumber.slice(-4)}
-                  </span>
-                  <span className="tabular block text-xs text-muted">
-                    {bank.ifsc}
-                  </span>
-                </Td>
-                <Td>
-                  <span className="text-xs text-muted">{bank.upiId}</span>
-                </Td>
-                <Td numeric>
-                  <span className="text-xs text-muted">
-                    {formatInr(bank.amountLimit.toString())}
-                  </span>
-                  <span className="block text-xs text-muted">
-                    {bank.txnLimit} txns · daily {bank.dailyLimit}
-                  </span>
-                </Td>
-                <Td>
-                  {bank.isActive ? (
-                    <Badge tone="success">Active</Badge>
-                  ) : (
-                    <Badge>Off</Badge>
-                  )}
-                </Td>
-                <Td>
-                  <DateTime value={bank.createdAt} />
-                </Td>
-                <Td>
-                  <div className="flex justify-end">
-                    <ActionForm action={toggleBankAction} hideMessage>
-                      <input type="hidden" name="bankId" value={bank.id} />
-                      <SubmitButton variant="secondary" size="sm">
-                        {bank.isActive ? "Turn off" : "Turn on"}
-                      </SubmitButton>
-                    </ActionForm>
-                  </div>
-                </Td>
-              </tr>
-            ))}
-          </Table>
+            minWidth="56rem"
+          />
 
           <Pagination
             page={page}

@@ -216,6 +216,59 @@ export const adminReplySchema = z.object({
   text: z.string().trim().min(1, "Reply cannot be empty").max(2000),
 });
 
+// ---------------------------------------------------------------------------
+// Super-admin only
+// ---------------------------------------------------------------------------
+
+export const createAdminSchema = z.object({
+  name: nameSchema,
+  email: emailSchema,
+  password: passwordSchema,
+  role: z.enum(["SUPER_ADMIN", "OPERATOR"]).optional(),
+});
+
+export const updateAdminSchema = z.object({
+  name: nameSchema.optional(),
+  role: z.enum(["SUPER_ADMIN", "OPERATOR"]).optional(),
+  isActive: z.boolean().optional(),
+  password: passwordSchema.optional(),
+});
+
+/**
+ * Correcting a payin. Changing the amount or the rate moves the agent's
+ * balance by the difference — see operations.updatePayin.
+ */
+export const updatePayinSchema = z
+  .object({
+    amount: amountSchema.optional(),
+    commissionRate: rateSchema.optional(),
+    txnRef: z.string().trim().min(4).max(40).optional(),
+    reason: z.string().trim().min(1, "Say why this is being corrected").max(280),
+  })
+  .refine(
+    (value) =>
+      value.amount !== undefined ||
+      value.commissionRate !== undefined ||
+      value.txnRef !== undefined,
+    { message: "Change at least one field", path: ["amount"] },
+  );
+
+/** Correcting a payout's figures. A settled payout re-credits the difference. */
+export const updatePayoutAmountsSchema = z
+  .object({
+    amount: amountSchema.optional(),
+    commissionRate: rateSchema.optional(),
+    upiId: upiSchema.optional(),
+    reason: z.string().trim().min(1, "Say why this is being corrected").max(280),
+  })
+  .refine(
+    (value) =>
+      value.amount !== undefined ||
+      value.commissionRate !== undefined ||
+      value.upiId !== undefined,
+    { message: "Change at least one field", path: ["amount"] },
+  );
+
 export const updateSettingsSchema = z.object({
   defaultPayinCommissionRate: rateSchema.optional(),
   defaultPayoutCommissionRate: rateSchema.optional(),

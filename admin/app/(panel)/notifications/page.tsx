@@ -1,4 +1,6 @@
+import type { Prisma } from "@prisma/client";
 import { sendNotificationAction } from "@/app/actions";
+import { DataTable, type Column } from "@/components/data-table";
 import {
   ActionForm,
   Checkbox,
@@ -14,14 +16,18 @@ import {
   DateTime,
   PageHeader,
   Pagination,
-  Table,
-  Td,
 } from "@/components/ui";
 import { prisma } from "@/lib/db";
 
 export const metadata = { title: "Notifications · 1XBET Agent Admin" };
 
 const PER_PAGE = 30;
+
+type Notice = Prisma.NotificationGetPayload<{
+  include: {
+    agent: { select: { id: true; name: true; mobile: true; status: true } };
+  };
+}>;
 
 export default async function NotificationsPage({
   searchParams,
@@ -47,6 +53,35 @@ export default async function NotificationsPage({
       orderBy: { name: "asc" },
     }),
   ]);
+
+  const columns: Column<Notice>[] = [
+    {
+      header: "Notification",
+      primary: true,
+      cell: (notice) => (
+        <div>
+          <span className="block font-medium text-ink">{notice.title}</span>
+          <span className="block text-xs text-muted">{notice.body}</span>
+          {notice.broadcastId ? (
+            <span className="mt-1 inline-block text-[11px] font-semibold uppercase tracking-wide text-sky">
+              Broadcast
+            </span>
+          ) : null}
+        </div>
+      ),
+    },
+    { header: "Agent", cell: (notice) => <AgentCell agent={notice.agent} /> },
+    {
+      header: "Read",
+      cell: (notice) =>
+        notice.read ? (
+          <Badge tone="success">Read</Badge>
+        ) : (
+          <Badge tone="warning">Unread</Badge>
+        ),
+    },
+    { header: "Sent", cell: (notice) => <DateTime value={notice.createdAt} /> },
+  ];
 
   return (
     <>
@@ -98,39 +133,12 @@ export default async function NotificationsPage({
         </Card>
 
         <Card title="Sent" bodyClassName="p-5">
-          <Table
-            head={["Notification", "Agent", "Read", "Sent"]}
+          <DataTable
+            columns={columns}
+            rows={notifications}
+            rowKey={(notice) => notice.id}
             empty="Nothing has been sent yet."
-          >
-            {notifications.map((notification) => (
-              <tr key={notification.id} className="hover:bg-inset/60">
-                <Td>
-                  <span className="font-medium text-ink">{notification.title}</span>
-                  <span className="block max-w-md text-xs text-muted">
-                    {notification.body}
-                  </span>
-                  {notification.broadcastId ? (
-                    <span className="mt-1 inline-block text-[11px] font-semibold uppercase tracking-wide text-sky">
-                      Broadcast
-                    </span>
-                  ) : null}
-                </Td>
-                <Td>
-                  <AgentCell agent={notification.agent} />
-                </Td>
-                <Td>
-                  {notification.read ? (
-                    <Badge tone="success">Read</Badge>
-                  ) : (
-                    <Badge tone="warning">Unread</Badge>
-                  )}
-                </Td>
-                <Td>
-                  <DateTime value={notification.createdAt} />
-                </Td>
-              </tr>
-            ))}
-          </Table>
+          />
 
           <Pagination
             page={page}

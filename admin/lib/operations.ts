@@ -686,3 +686,165 @@ export async function sendNotification(input: {
 
   return { recipients: recipients.length, broadcastId };
 }
+
+// ---------------------------------------------------------------------------
+// Corrections (super admin)
+// ---------------------------------------------------------------------------
+
+/**
+ * Corrects a payin's figures and moves the agent's balance by the
+ * difference.
+ *
+ * A payin's effect on the float is `commission - amount`. Re-computing that
+ * and applying only the delta means the balance ends up where it would have
+ * been had the record been right the first time, without unwinding
+ * everything that happened since.
+ *
+ * `previousBalance` and `afterBalance` on *this* record are rewritten to
+ * match; the snapshots on later records are left alone, because they are a
+ * record of what the balance actually was at the time.
+ */
+export async function updatePayin(input: {
+  payinId: string;
+  amount?: Numeric;
+  commissionRate?: Numeric;
+  txnRef?: string;
+  reason: string;
+  adminId: string;
+}): Promise<Payin> {
+  const payin = await prisma.$transaction(async (tx) => {
+    const existing = await tx.payin.findUnique({ where: { id: input.payinId } });
+    if (!existing) throw ApiError.notFound("Payin");
+
+    const amount = money(input.amount ?? existing.amount);
+    const rate = D(input.commissionRate ?? existing.commissionRate);
+    const commission = commissionOf(amount, rate);
+
+    const oldEffect = D(existing.commission).sub(existing.amount);
+    const newEffect = commission.sub(amount);
+    const difference = newEffect.sub(oldEffect);
+
+    let previousBalance = existing.previousBalance;
+    let afterBalance = existing.afterBalance;
+
+    if (!difference.isZero()) {
+      const change = await applyBalanceDelta(tx, existing.agentId, difference);
+      // This record now describes the balance it leaves behind.
+      previousBalance = money(D(change.newBalance).sub(newEffect));
+      afterBalance = change.newBalance;
+    }
+
+    const updated = await tx.payin.update({
+      where: { id: existing.id },
+      data: {
+        amount,
+        commissionRate: rate,
+        commission,
+        previousBalance,
+        afterBalance,
+        txnRef: input.txnRef ?? existing.txnRef,
+      },
+    });
+
+    if (!difference.isZero()) {
+      await notifyAgent(tx, {
+        agentId: existing.agentId,
+        title: "Payin corrected",
+        body: `Payin ${existing.reference} was corrected to ${inr(amount)} (commission ${inr(commission)}). ${input.reason}`,
+        createdById: input.adminId,
+      });
+    }
+
+    return updated;
+  });
+
+  await writeAudit({
+    adminId: input.adminId,
+    action: "payin.update",
+    entity: "Payin",
+    entityId: payin.id,
+    summary: `Corrected payin ${payin.reference} to ${inr(payin.amount)}`,
+    meta: {
+      agentId: payin.agentId,
+      amount: toNumber(payin.amount),
+      commission: toNumber(payin.commission),
+      commissionRate: toNumber(payin.commissionRate),
+      reason: input.reason,
+    },
+  });
+
+  return payin;
+}
+
+/**
+ * Corrects a payout's figures.
+ *
+ * A settled payout has already credited `amount + commission`, so the
+ * difference is applied to the balance. One that is still open, accepted or
+ * failed has moved no money, so only the record changes.
+ */
+export async function updatePayoutAmounts(input: {
+  payoutId: string;
+  amount?: Numeric;
+  commissionRate?: Numeric;
+  upiId?: string;
+  reason: string;
+  adminId: string;
+}): Promise<Payout> {
+  const payout = await prisma.$transaction(async (tx) => {
+    const existing = await tx.payout.findUnique({ where: { id: input.payoutId } });
+    if (!existing) throw ApiError.notFound("Payout");
+
+    const amount = money(input.amount ?? existing.amount);
+    const rate = D(input.commissionRate ?? existing.commissionRate);
+    const commission = commissionOf(amount, rate);
+
+    const wasCredited = existing.status === "COMPLETED";
+    if (wasCredited && existing.agentId) {
+      const oldCredit = D(existing.amount).add(existing.commission);
+      const newCredit = amount.add(commission);
+      const difference = newCredit.sub(oldCredit);
+      if (!difference.isZero()) {
+        await applyBalanceDelta(tx, existing.agentId, difference);
+      }
+    }
+
+    const updated = await tx.payout.update({
+      where: { id: existing.id },
+      data: {
+        amount,
+        commissionRate: rate,
+        commission,
+        upiId: input.upiId ?? existing.upiId,
+      },
+    });
+
+    if (existing.agentId) {
+      await notifyAgent(tx, {
+        agentId: existing.agentId,
+        title: "Payout corrected",
+        body: `Payout ${existing.reference} was corrected to ${inr(amount)} (commission ${inr(commission)}). ${input.reason}`,
+        createdById: input.adminId,
+      });
+    }
+
+    return updated;
+  });
+
+  await writeAudit({
+    adminId: input.adminId,
+    action: "payout.updateAmounts",
+    entity: "Payout",
+    entityId: payout.id,
+    summary: `Corrected payout ${payout.reference} to ${inr(payout.amount)}`,
+    meta: {
+      agentId: payout.agentId,
+      amount: toNumber(payout.amount),
+      commission: toNumber(payout.commission),
+      status: payout.status,
+      reason: input.reason,
+    },
+  });
+
+  return payout;
+}

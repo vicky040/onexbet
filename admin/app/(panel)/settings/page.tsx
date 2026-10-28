@@ -7,12 +7,55 @@ import {
   Textarea,
 } from "@/components/form";
 import { Card, PageHeader } from "@/components/ui";
+import { isSuperAdmin } from "@/lib/auth";
 import { getSettings } from "@/lib/db";
+import { formatInr, formatPercent } from "@/lib/money";
 
 export const metadata = { title: "Settings · 1XBET Agent Admin" };
 
 export default async function SettingsPage() {
-  const settings = await getSettings();
+  const [settings, superAdmin] = await Promise.all([
+    getSettings(),
+    isSuperAdmin(),
+  ]);
+
+  // These values decide commission on every transaction, so operators see
+  // them but cannot move them.
+  if (!superAdmin) {
+    return (
+      <>
+        <PageHeader
+          title="Settings"
+          subtitle="Defaults applied to new agents, and the rules the mobile app follows."
+        />
+        <Card
+          title="Current settings"
+          description="Changing these is restricted to super admins."
+        >
+          <dl className="space-y-2 text-sm">
+            {[
+              ["Default payin commission", formatPercent(settings.defaultPayinCommissionRate.toString())],
+              ["Default payout commission", formatPercent(settings.defaultPayoutCommissionRate.toString())],
+              ["Minimum deposit", formatInr(settings.minDepositAmount.toString())],
+              ["Required security deposit", `${settings.requiredSecurityDepositUsdt.toString()} USDT`],
+              ["Sign-ups", settings.signupsEnabled ? "Open" : "Closed"],
+              ["New agents need approval", settings.requireAgentApproval ? "Yes" : "No"],
+              ["Deposits auto-approved", settings.autoApproveDeposits ? "Yes" : "No"],
+            ].map(([label, value]) => (
+              <div key={label} className="flex justify-between gap-3">
+                <dt className="text-muted">{label}</dt>
+                <dd className="tabular font-semibold text-ink">{value}</dd>
+              </div>
+            ))}
+            <div className="pt-2">
+              <dt className="text-muted">Support welcome message</dt>
+              <dd className="mt-1">{settings.supportWelcomeMessage}</dd>
+            </div>
+          </dl>
+        </Card>
+      </>
+    );
+  }
 
   return (
     <>

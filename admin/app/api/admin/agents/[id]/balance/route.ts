@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/auth";
 import { ok, readBody, withRoute } from "@/lib/http";
 import { adjustBalance } from "@/lib/operations";
 import { adjustBalanceSchema } from "@/lib/validation";
@@ -12,7 +12,7 @@ type Params = { params: Promise<{ id: string }> };
  * the agent is notified; a debit that would go below zero is refused.
  */
 export const POST = withRoute(async (request: Request, { params }: Params) => {
-  const admin = await requireAdmin();
+  const admin = await requireSuperAdmin();
   const { id } = await params;
   const body = await readBody(request, adjustBalanceSchema);
 

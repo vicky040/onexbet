@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AutoRefresh } from "@/components/auto-refresh";
 import { Badge, DateTime, EmptyState, PageHeader } from "@/components/ui";
 import { prisma } from "@/lib/db";
 
@@ -56,6 +57,7 @@ export default async function SupportPage() {
 
   return (
     <>
+      <AutoRefresh seconds={15} />
       <PageHeader
         title="Support"
         subtitle="Conversations from the app's chat screen. Unanswered threads come first."
