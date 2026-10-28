@@ -9,6 +9,7 @@ import 'api/http_wallet_repository.dart';
 import 'api/token_store.dart';
 import 'models/bank_account.dart';
 import 'models/dashboard_summary.dart';
+import 'models/deposit_config.dart';
 import 'models/messages.dart';
 import 'models/transactions.dart';
 import 'repositories/auth_repository.dart';
@@ -66,6 +67,11 @@ final earningsProvider = FutureProvider<List<EarningWeek>>(
   (ref) => ref.watch(walletRepositoryProvider).earnings(),
 );
 
+/// Currencies, minimums and the USDT address, as the server describes them.
+final depositConfigProvider = FutureProvider<DepositConfig>(
+  (ref) => ref.watch(walletRepositoryProvider).depositConfig(),
+);
+
 final payinsProvider = FutureProvider<List<PayinRecord>>(
   (ref) => ref.watch(walletRepositoryProvider).payins(),
 );
@@ -120,10 +126,14 @@ class DepositsController extends AsyncNotifier<List<DepositRecord>> {
   Future<List<DepositRecord>> build() =>
       ref.watch(walletRepositoryProvider).deposits();
 
-  Future<DepositRecord> create({required double amount, required String utr}) async {
+  Future<DepositRecord> create({
+    required double amount,
+    required String utr,
+    String currency = 'INR',
+  }) async {
     final record = await ref
         .read(walletRepositoryProvider)
-        .createDeposit(amount: amount, utr: utr);
+        .createDeposit(amount: amount, utr: utr, currency: currency);
     state = AsyncData([record, ...?state.value]);
     return record;
   }

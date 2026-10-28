@@ -111,6 +111,28 @@ components querying Prisma (no HTTP hop); forms post to server actions. The
 admin REST API covers the same ground for scripts and automation, so a page
 and an endpoint always agree.
 
+### Deposits in two currencies
+
+An agent can fund their float by bank transfer or by sending USDT.
+
+Balances are always in rupees. A USDT deposit is converted by the **server**
+at the rate in Settings, and both the USDT amount and the rate used are
+stored on the record, so a later rate change cannot rewrite what someone was
+credited. The client sends what it sent; it never decides what it is worth.
+
+One minimum drives both: `minDepositUsdt` (3000 by default). The rupee
+minimum is that valued at `usdtInrRate`, so the two currencies always ask for
+the same worth — set the rate to 90 and the rupee floor becomes ₹270,000.
+
+`GET /api/v1/deposits/config` is what the app reads to draw the screen: the
+currencies, their minimums, and the USDT address and network. Nothing is
+baked into the build, so the address and the floor can move without shipping
+a release.
+
+The QR code in the app is a **bundled image** of the address. If you change
+`usdtDepositAddress` in Settings, that image must be replaced too, or agents
+will scan the old address — the settings screen says so next to the field.
+
 ### The ledger
 
 | Event | Agent balance |

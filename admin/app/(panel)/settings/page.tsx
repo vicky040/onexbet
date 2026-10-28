@@ -36,7 +36,11 @@ export default async function SettingsPage() {
             {[
               ["Default payin commission", formatPercent(settings.defaultPayinCommissionRate.toString())],
               ["Default payout commission", formatPercent(settings.defaultPayoutCommissionRate.toString())],
-              ["Minimum deposit", formatInr(settings.minDepositAmount.toString())],
+              ["Minimum deposit", `${settings.minDepositUsdt.toString()} USDT`],
+              ["USDT rate", formatInr(settings.usdtInrRate.toString())],
+              ["Minimum deposit (₹)", formatInr(Number(settings.minDepositUsdt) * Number(settings.usdtInrRate))],
+              ["USDT network", settings.usdtNetwork],
+              ["USDT address", settings.usdtDepositAddress],
               ["Required security deposit", `${settings.requiredSecurityDepositUsdt.toString()} USDT`],
               ["Sign-ups", settings.signupsEnabled ? "Open" : "Closed"],
               ["New agents need approval", settings.requireAgentApproval ? "Yes" : "No"],
@@ -95,13 +99,24 @@ export default async function SettingsPage() {
           <div className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <Field
-                label="Minimum deposit (₹)"
-                name="minDepositAmount"
+                label="Minimum deposit (USDT)"
+                name="minDepositUsdt"
                 type="number"
                 step="0.01"
                 min="0"
-                defaultValue={settings.minDepositAmount.toString()}
-                hint="The app refuses anything smaller"
+                defaultValue={settings.minDepositUsdt.toString()}
+                hint="Applies to both currencies"
+              />
+              <Field
+                label="USDT rate (₹ per USDT)"
+                name="usdtInrRate"
+                type="number"
+                step="0.0001"
+                min="0.0001"
+                defaultValue={settings.usdtInrRate.toString()}
+                hint={`Rupee minimum works out at ${formatInr(
+                  Number(settings.minDepositUsdt) * Number(settings.usdtInrRate),
+                )}`}
               />
               <Field
                 label="Required security deposit (USDT)"
@@ -117,6 +132,26 @@ export default async function SettingsPage() {
               label="Approve deposits automatically"
               hint="Credits an agent's balance the moment they submit, with no review. Leave off unless you reconcile another way."
               defaultChecked={settings.autoApproveDeposits}
+            />
+          </div>
+        </Card>
+
+        <Card
+          title="USDT deposits"
+          description="Where agents send USDT. The QR code in the app is a bundled image of this address — if you change the address here, the app's QR must be replaced too, or agents will send to the old one."
+        >
+          <div className="space-y-4">
+            <Field
+              label="Deposit address"
+              name="usdtDepositAddress"
+              defaultValue={settings.usdtDepositAddress}
+              hint="Check this character by character before saving."
+            />
+            <Field
+              label="Network"
+              name="usdtNetwork"
+              defaultValue={settings.usdtNetwork}
+              hint="Shown beside the address, e.g. TRC20 (Tron)"
             />
           </div>
         </Card>

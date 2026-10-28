@@ -11,7 +11,6 @@ const EMAIL = /^[\w.+-]+@[\w-]+(\.[\w-]+)+$/;
 const IFSC = /^[A-Z]{4}0[A-Z0-9]{6}$/;
 const UPI = /^[\w.-]{2,}@[a-zA-Z]{2,}$/;
 const ACCOUNT_NUMBER = /^\d{9,18}$/;
-const UTR = /^[A-Za-z0-9]{6,22}$/;
 
 export const mobileSchema = z
   .string()
@@ -108,9 +107,24 @@ export const bankAccountUpdateSchema = bankAccountSchema.partial();
 
 export const setBankActiveSchema = z.object({ isActive: z.boolean() });
 
+/**
+ * `amount` is in `currency`. A USDT deposit is converted to rupees by the
+ * server at the configured rate, so the client never decides what a deposit
+ * is worth.
+ *
+ * `utr` is a bank reference for INR and a chain transaction hash for USDT,
+ * which is why it allows a longer value.
+ */
 export const createDepositSchema = z.object({
   amount: amountSchema,
-  utr: z.string().trim().regex(UTR, "Enter a valid UTR / reference number"),
+  currency: z.enum(["INR", "USDT"]).default("INR"),
+  utr: z
+    .string()
+    .trim()
+    .regex(
+      /^[A-Za-z0-9]{6,80}$/,
+      "Enter a valid UTR / transaction reference",
+    ),
   proofUrl: z.string().trim().url("Proof must be a URL").optional(),
 });
 
@@ -272,7 +286,19 @@ export const updatePayoutAmountsSchema = z
 export const updateSettingsSchema = z.object({
   defaultPayinCommissionRate: rateSchema.optional(),
   defaultPayoutCommissionRate: rateSchema.optional(),
-  minDepositAmount: z.coerce.number().min(0).optional(),
+  minDepositUsdt: z.coerce.number().min(0).max(99_999_999).optional(),
+  usdtInrRate: z.coerce
+    .number()
+    .positive("The USDT rate must be greater than zero")
+    .max(100_000)
+    .optional(),
+  usdtDepositAddress: z
+    .string()
+    .trim()
+    .min(20, "That does not look like a wallet address")
+    .max(120)
+    .optional(),
+  usdtNetwork: z.string().trim().min(2).max(60).optional(),
   requiredSecurityDepositUsdt: z.coerce.number().min(0).optional(),
   supportWelcomeMessage: z.string().trim().min(1).max(500).optional(),
   signupsEnabled: z.boolean().optional(),

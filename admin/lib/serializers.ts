@@ -145,6 +145,10 @@ export function serializeDeposit(deposit: Deposit) {
     createdAt: iso(deposit.createdAt),
     previousBalance: toNumber(deposit.previousBalance),
     amount: toNumber(deposit.amount),
+    currency: deposit.currency,
+    amountUsdt:
+      deposit.amountUsdt === null ? null : toNumber(deposit.amountUsdt),
+    usdtRate: deposit.usdtRate === null ? null : toNumber(deposit.usdtRate),
     afterBalance:
       deposit.afterBalance === null
         ? toNumber(deposit.previousBalance) + toNumber(deposit.amount)

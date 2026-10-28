@@ -10,52 +10,77 @@ import '../../core/theme/app_text_styles.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/validators.dart';
 import '../../core/widgets/app_bars.dart';
+import '../../core/widgets/async_views.dart';
 import '../../core/widgets/buttons.dart';
 import '../../core/widgets/form_fields.dart';
 import '../../core/widgets/responsive.dart';
 import '../../core/widgets/section_card.dart';
+import '../../data/models/deposit_config.dart';
 import '../../data/providers.dart';
 
-/// New deposit request: amount, UTR / reference and optional proof image.
+/// New deposit request, in rupees or USDT.
+///
+/// The currencies, their minimums and the USDT address all come from the
+/// server, so none of it is baked into the build.
 class DepositScreen extends ConsumerStatefulWidget {
   const DepositScreen({super.key});
+
+  /// The QR for the USDT deposit address. The lower part of the image is a
+  /// Binance app advert, which [_UsdtPanel] crops away.
+  static const usdtQrAsset = 'assets/payment/usdt_trc20_qr.jpg';
 
   @override
   ConsumerState<DepositScreen> createState() => _DepositScreenState();
 }
 
 class _DepositScreenState extends ConsumerState<DepositScreen> {
-  static const _minAmount = 100;
-  static const _quickAmounts = [5000, 10000, 50000, 100000];
+  static const _inrQuickAmounts = [5000, 10000, 50000, 100000];
+  static const _usdtQuickAmounts = [3000, 5000, 10000, 25000];
 
   final _formKey = GlobalKey<FormState>();
   final _amount = TextEditingController();
-  final _utr = TextEditingController();
+  final _reference = TextEditingController();
   String? _proofName;
   Uint8List? _proofBytes;
+  var _currencyCode = 'INR';
   var _submitting = false;
 
   @override
   void dispose() {
     _amount.dispose();
-    _utr.dispose();
+    _reference.dispose();
     super.dispose();
   }
 
-  String? _validateAmount(String? value) {
+  void _selectCurrency(String code) {
+    if (code == _currencyCode) return;
+    setState(() {
+      _currencyCode = code;
+      // The figures mean different things in each currency, so starting
+      // fresh is safer than carrying a rupee amount into a USDT field.
+      _amount.clear();
+      _reference.clear();
+      _formKey.currentState?.reset();
+    });
+  }
+
+  String? _validateAmount(DepositCurrencyOption currency, String? value) {
     final error = Validators.positiveAmount(value);
     if (error != null) return error;
-    if (num.parse(value!.trim()) < _minAmount) {
-      return 'Minimum deposit is ${formatInr(_minAmount)}';
+
+    if (num.parse(value!.trim()) < currency.minimum) {
+      return currency.isUsdt
+          ? 'Minimum deposit is ${currency.minimum.toStringAsFixed(0)} USDT'
+          : 'Minimum deposit is ${formatInr(currency.minimum)}';
     }
     return null;
   }
 
-  String? _validateUtr(String? value) {
+  String? _validateReference(DepositCurrencyOption currency, String? value) {
     final v = value?.trim() ?? '';
-    if (v.isEmpty) return 'UTR / reference number is required';
-    if (!RegExp(r'^[A-Za-z0-9]{6,22}$').hasMatch(v)) {
-      return 'Enter a valid UTR / reference number';
+    if (v.isEmpty) return '${currency.referenceLabel} is required';
+    if (!RegExp(r'^[A-Za-z0-9]{6,80}$').hasMatch(v)) {
+      return 'Enter a valid ${currency.referenceLabel.toLowerCase()}';
     }
     return null;
   }
@@ -84,7 +109,8 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     try {
       await ref.read(depositsProvider.notifier).create(
             amount: double.parse(_amount.text.trim()),
-            utr: _utr.text.trim(),
+            utr: _reference.text.trim(),
+            currency: _currencyCode,
           );
       if (!mounted) return;
       showMessage(context, 'Deposit request submitted for verification');
@@ -99,103 +125,354 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
   @override
   Widget build(BuildContext context) {
     final balance = ref.watch(summaryProvider).value?.totalBalance;
+    final config = ref.watch(depositConfigProvider);
 
     return Scaffold(
       appBar: const SubPageAppBar(title: 'Deposit'),
-      body: Form(
-        key: _formKey,
-        child: PageListView(
-          maxWidth: 640,
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-          children: [
-            SectionCard(
-              title: 'New Deposit',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  InsetPanel(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.account_balance_wallet_outlined,
-                          color: AppColors.primaryBlue,
-                        ),
-                        const SizedBox(width: 12),
-                        const Expanded(
-                          child: Text('Current balance', style: AppTextStyles.kvLabel),
-                        ),
-                        Text(
-                          balance == null ? '--' : formatInr(balance),
-                          style: AppTextStyles.statValue.copyWith(fontSize: 18),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  TextFormField(
-                    key: const Key('depositAmount'),
-                    controller: _amount,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
-                    ],
-                    decoration: const InputDecoration(
-                      labelText: 'Amount',
-                      prefixText: '₹ ',
-                    ),
-                    validator: _validateAmount,
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+      body: AsyncValueView(
+        value: config,
+        skeletonCount: 3,
+        onRetry: () => ref.invalidate(depositConfigProvider),
+        data: (config) {
+          final currency =
+              config.byCode(_currencyCode) ?? config.currencies.first;
+
+          return Form(
+            key: _formKey,
+            child: PageListView(
+              maxWidth: 640,
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+              children: [
+                SectionCard(
+                  title: 'New Deposit',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      for (final a in _quickAmounts)
-                        ActionChip(
-                          label: Text(formatInrGrouped(a)),
-                          onPressed: () => _amount.text = '$a',
+                      InsetPanel(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.account_balance_wallet_outlined,
+                              color: AppColors.primaryBlue,
+                            ),
+                            const SizedBox(width: 12),
+                            const Expanded(
+                              child: Text(
+                                'Current balance',
+                                style: AppTextStyles.kvLabel,
+                              ),
+                            ),
+                            Text(
+                              balance == null ? '--' : formatInr(balance),
+                              style: AppTextStyles.statValue
+                                  .copyWith(fontSize: 18),
+                            ),
+                          ],
                         ),
+                      ),
+                      const SizedBox(height: 18),
+
+                      _CurrencyPicker(
+                        currencies: config.currencies,
+                        selected: currency.code,
+                        onChanged: _selectCurrency,
+                      ),
+                      const SizedBox(height: 18),
+
+                      if (currency.isUsdt) ...[
+                        _UsdtPanel(currency: currency),
+                        const SizedBox(height: 18),
+                      ],
+
+                      TextFormField(
+                        key: const Key('depositAmount'),
+                        controller: _amount,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'^\d*\.?\d{0,2}'),
+                          ),
+                        ],
+                        decoration: InputDecoration(
+                          labelText: 'Amount',
+                          prefixText: currency.isUsdt ? null : '₹ ',
+                          suffixText: currency.isUsdt ? 'USDT' : null,
+                          helperText: currency.isUsdt
+                              ? 'Minimum ${currency.minimum.toStringAsFixed(0)} USDT'
+                              : 'Minimum ${formatInr(currency.minimum)} '
+                                  '(${(currency.minimum / config.usdtInrRate).toStringAsFixed(0)}'
+                                  ' USDT at ${formatInr(config.usdtInrRate)})',
+                          helperMaxLines: 2,
+                        ),
+                        validator: (v) => _validateAmount(currency, v),
+                        onChanged: (_) => setState(() {}),
+                      ),
+
+                      if (currency.isUsdt) _UsdtValueHint(
+                        amount: _amount.text,
+                        rate: config.usdtInrRate,
+                      ),
+
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final a in currency.isUsdt
+                              ? _usdtQuickAmounts
+                              : _inrQuickAmounts)
+                            ActionChip(
+                              label: Text(
+                                currency.isUsdt
+                                    ? '$a USDT'
+                                    : formatInrGrouped(a),
+                              ),
+                              onPressed: () {
+                                _amount.text = '$a';
+                                setState(() {});
+                              },
+                            ),
+                        ],
+                      ),
+                      formGap,
+
+                      TextFormField(
+                        key: const Key('depositUtr'),
+                        controller: _reference,
+                        textCapitalization: TextCapitalization.characters,
+                        decoration: InputDecoration(
+                          labelText: currency.referenceLabel,
+                          prefixIcon: Icon(
+                            currency.isUsdt
+                                ? Icons.link_rounded
+                                : Icons.tag_rounded,
+                          ),
+                        ),
+                        validator: (v) => _validateReference(currency, v),
+                      ),
+                      formGap,
+
+                      _ProofPicker(
+                        name: _proofName,
+                        bytes: _proofBytes,
+                        onPick: _pickProof,
+                        onRemove: () => setState(() {
+                          _proofName = null;
+                          _proofBytes = null;
+                        }),
+                      ),
+                      const SizedBox(height: 20),
+                      PrimaryButton(
+                        label: 'Submit deposit',
+                        loading: _submitting,
+                        onPressed: _submit,
+                      ),
                     ],
                   ),
-                  formGap,
-                  TextFormField(
-                    key: const Key('depositUtr'),
-                    controller: _utr,
-                    textCapitalization: TextCapitalization.characters,
-                    decoration: const InputDecoration(
-                      labelText: 'UTR / Reference number',
-                      prefixIcon: Icon(Icons.tag_rounded),
-                    ),
-                    validator: _validateUtr,
+                ),
+                Text(
+                  currency.isUsdt
+                      ? 'Send only USDT on ${currency.network} to the address above. '
+                          'Anything else is lost. Your balance is credited in rupees '
+                          'at ${formatInr(config.usdtInrRate)} per USDT once the '
+                          'transfer is confirmed.'
+                      : 'Deposits are credited to your balance after the payment is '
+                          'verified. Make sure the UTR matches your bank transfer.',
+                  style: AppTextStyles.muted,
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// INR or USDT.
+class _CurrencyPicker extends StatelessWidget {
+  const _CurrencyPicker({
+    required this.currencies,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final List<DepositCurrencyOption> currencies;
+  final String selected;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        for (final currency in currencies) ...[
+          Expanded(
+            child: _CurrencyTab(
+              key: Key('currency_${currency.code}'),
+              label: currency.label,
+              code: currency.code,
+              selected: currency.code == selected,
+              onTap: () => onChanged(currency.code),
+            ),
+          ),
+          if (currency != currencies.last) const SizedBox(width: 10),
+        ],
+      ],
+    );
+  }
+}
+
+class _CurrencyTab extends StatelessWidget {
+  const _CurrencyTab({
+    super.key,
+    required this.label,
+    required this.code,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final String code;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      selected: selected,
+      button: true,
+      child: Material(
+        color: selected ? AppColors.navy : AppColors.pillBg,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+            child: Column(
+              children: [
+                Icon(
+                  code == 'USDT'
+                      ? Icons.currency_bitcoin_rounded
+                      : Icons.account_balance_rounded,
+                  size: 22,
+                  color: selected ? AppColors.white : AppColors.navy,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    color: selected ? AppColors.white : AppColors.textPrimary,
                   ),
-                  formGap,
-                  _ProofPicker(
-                    name: _proofName,
-                    bytes: _proofBytes,
-                    onPick: _pickProof,
-                    onRemove: () => setState(() {
-                      _proofName = null;
-                      _proofBytes = null;
-                    }),
-                  ),
-                  const SizedBox(height: 20),
-                  PrimaryButton(
-                    label: 'Submit deposit',
-                    loading: _submitting,
-                    onPressed: _submit,
-                  ),
-                ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The QR code, network and address for a USDT transfer.
+class _UsdtPanel extends StatelessWidget {
+  const _UsdtPanel({required this.currency});
+
+  final DepositCurrencyOption currency;
+
+  /// The source image carries a Binance app advert below the address; only
+  /// the top of it is worth showing.
+  static const _usefulHeightFraction = 0.68;
+
+  @override
+  Widget build(BuildContext context) {
+    final address = currency.address ?? '';
+
+    return InsetPanel(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: Align(
+              alignment: Alignment.topCenter,
+              heightFactor: _usefulHeightFraction,
+              child: Image.asset(
+                DepositScreen.usdtQrAsset,
+                width: 280,
+                fit: BoxFit.fitWidth,
+                semanticLabel: 'USDT deposit QR code',
               ),
             ),
-            const Text(
-              'Deposits are credited to your balance after the payment is verified. '
-              'Make sure the UTR matches your bank transfer.',
-              style: AppTextStyles.muted,
+          ),
+          const SizedBox(height: 12),
+          if (currency.network != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.chipBg,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                'Network: ${currency.network}',
+                style: const TextStyle(
+                  color: AppColors.chipText,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
+              ),
             ),
-          ],
-        ),
+          const SizedBox(height: 12),
+          SelectableText(
+            address,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.2,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          OutlinedPillButton(
+            label: 'Copy address',
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: address));
+              if (context.mounted) showMessage(context, 'Address copied');
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Shows what the typed USDT amount is worth, so there is no surprise when
+/// the rupee balance moves.
+class _UsdtValueHint extends StatelessWidget {
+  const _UsdtValueHint({required this.amount, required this.rate});
+
+  final String amount;
+  final double rate;
+
+  @override
+  Widget build(BuildContext context) {
+    final parsed = double.tryParse(amount.trim());
+    if (parsed == null || parsed <= 0) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Text(
+        'Credits about ${formatInr(parsed * rate)} at ${formatInr(rate)} per USDT',
+        style: AppTextStyles.muted.copyWith(color: AppColors.primaryBlue),
       ),
     );
   }

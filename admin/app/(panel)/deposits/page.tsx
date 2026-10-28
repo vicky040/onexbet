@@ -103,6 +103,12 @@ export default async function DepositsPage({
       cell: (deposit) => (
         <div>
           <Money value={deposit.amount.toString()} />
+          {deposit.currency === "USDT" && deposit.amountUsdt ? (
+            <span className="block text-xs text-info">
+              {deposit.amountUsdt.toString()} USDT @{" "}
+              {formatInr(deposit.usdtRate?.toString() ?? 0)}
+            </span>
+          ) : null}
           {deposit.afterBalance ? (
             <span className="block text-xs text-muted">
               → {formatInr(deposit.afterBalance.toString())}
@@ -112,9 +118,11 @@ export default async function DepositsPage({
       ),
     },
     {
-      header: "UTR",
+      header: "Reference",
       cell: (deposit) => (
-        <span className="tabular text-xs text-muted">{deposit.utr}</span>
+        <span className="tabular block max-w-[12rem] truncate text-xs text-muted">
+          {deposit.utr}
+        </span>
       ),
     },
     { header: "Status", cell: (deposit) => <StatusBadge status={deposit.status} /> },

@@ -1,4 +1,5 @@
 import '../models/dashboard_summary.dart';
+import '../models/deposit_config.dart';
 import '../models/json.dart';
 import '../models/transactions.dart';
 import '../repositories/wallet_repository.dart';
@@ -58,13 +59,20 @@ class HttpWalletRepository implements WalletRepository {
   }
 
   @override
+  Future<DepositConfig> depositConfig() async {
+    final data = await _api.get('/deposits/config');
+    return parseResponse(() => DepositConfig.fromJson(asObject(data)));
+  }
+
+  @override
   Future<DepositRecord> createDeposit({
     required double amount,
     required String utr,
+    String currency = 'INR',
   }) async {
     final data = await _api.post(
       '/deposits',
-      body: {'amount': amount, 'utr': utr},
+      body: {'amount': amount, 'utr': utr, 'currency': currency},
     );
     return parseResponse(() => DepositRecord.fromJson(asObject(data)));
   }

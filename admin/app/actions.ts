@@ -514,7 +514,10 @@ export async function updateSettingsAction(
     const body = updateSettingsSchema.parse({
       defaultPayinCommissionRate: str(form, "defaultPayinCommissionRate"),
       defaultPayoutCommissionRate: str(form, "defaultPayoutCommissionRate"),
-      minDepositAmount: str(form, "minDepositAmount"),
+      minDepositUsdt: str(form, "minDepositUsdt"),
+      usdtInrRate: str(form, "usdtInrRate"),
+      usdtDepositAddress: str(form, "usdtDepositAddress"),
+      usdtNetwork: str(form, "usdtNetwork"),
       requiredSecurityDepositUsdt: str(form, "requiredSecurityDepositUsdt"),
       supportWelcomeMessage: str(form, "supportWelcomeMessage"),
       signupsEnabled: bool(form, "signupsEnabled"),

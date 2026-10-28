@@ -157,17 +157,42 @@ Future<void> main() async {
       );
     });
 
+    test('the deposit config describes both currencies', () async {
+      await signIn();
+      final config = await wallet.depositConfig();
+
+      expect(config.usdtInrRate, greaterThan(0));
+
+      final inr = config.byCode('INR');
+      final usdt = config.byCode('USDT');
+      expect(inr, isNotNull);
+      expect(usdt, isNotNull);
+
+      // The two minimums are worth the same.
+      expect(
+        inr!.minimum,
+        closeTo(usdt!.minimum * config.usdtInrRate, 0.01),
+      );
+      expect(usdt.address, isNotEmpty);
+      expect(usdt.network, isNotEmpty);
+      expect(usdt.isUsdt, isTrue);
+      expect(inr.isUsdt, isFalse);
+    });
+
     test('deposits list, and a new one comes back pending', () async {
       await signIn();
 
       final before = await wallet.deposits();
       expect(before, isNotEmpty);
 
+      final config = await wallet.depositConfig();
+      final amount = config.byCode('INR')!.minimum;
       final utr = 'DART${DateTime.now().millisecondsSinceEpoch}';
-      final created = await wallet.createDeposit(amount: 1234.56, utr: utr);
+      final created = await wallet.createDeposit(amount: amount, utr: utr);
 
       expect(created.id, startsWith('TXN'));
-      expect(created.amount, 1234.56);
+      expect(created.amount, amount);
+      expect(created.currency, 'INR');
       expect(created.status, TxnStatus.pending);
       expect(created.utr, utr);
       expect(
@@ -177,6 +202,28 @@ Future<void> main() async {
 
       final after = await wallet.deposits();
       expect(after.length, before.length + 1);
+    });
+
+    test('a USDT deposit is converted to rupees by the server', () async {
+      await signIn();
+      final config = await wallet.depositConfig();
+      final usdt = config.byCode('USDT')!;
+
+      final created = await wallet.createDeposit(
+        amount: usdt.minimum,
+        utr: 'DARTUSDT${DateTime.now().millisecondsSinceEpoch}',
+        currency: 'USDT',
+      );
+
+      expect(created.currency, 'USDT');
+      expect(created.isUsdt, isTrue);
+      expect(created.amountUsdt, usdt.minimum);
+      expect(created.usdtRate, config.usdtInrRate);
+      // The rupee figure is the server's, not ours.
+      expect(
+        created.amount,
+        closeTo(usdt.minimum * config.usdtInrRate, 0.01),
+      );
     });
 
     test('a deposit under the minimum is refused with the reason', () async {
@@ -192,6 +239,26 @@ Future<void> main() async {
             (e) => e.message,
             'message',
             contains('Minimum deposit'),
+          ),
+        ),
+      );
+    });
+
+    test('a USDT deposit under the minimum is refused in USDT', () async {
+      await signIn();
+      final usdt = (await wallet.depositConfig()).byCode('USDT')!;
+
+      await expectLater(
+        wallet.createDeposit(
+          amount: usdt.minimum - 1,
+          utr: 'DARTUSDTLOW${DateTime.now().millisecondsSinceEpoch}',
+          currency: 'USDT',
+        ),
+        throwsA(
+          isA<ApiException>().having(
+            (e) => e.message,
+            'message',
+            contains('USDT'),
           ),
         ),
       );

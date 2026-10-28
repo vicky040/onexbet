@@ -103,6 +103,9 @@ class DepositRecord {
     required this.afterBalance,
     required this.status,
     this.utr,
+    this.currency = 'INR',
+    this.amountUsdt,
+    this.usdtRate,
   });
 
   final String id;
@@ -116,6 +119,14 @@ class DepositRecord {
   final TxnStatus status;
   final String? utr;
 
+  /// `INR` or `USDT`. Balances are always in rupees, so [amount] is the
+  /// rupee value either way; [amountUsdt] is what was actually sent.
+  final String currency;
+  final double? amountUsdt;
+  final double? usdtRate;
+
+  bool get isUsdt => currency == 'USDT';
+
   factory DepositRecord.fromJson(Map<String, dynamic> json) => DepositRecord(
         id: asString(json['id']),
         createdAt: asDate(json['createdAt']),
@@ -124,6 +135,10 @@ class DepositRecord {
         afterBalance: asDouble(json['afterBalance']),
         status: TxnStatus.fromCode(json['status']),
         utr: json['utr'] as String?,
+        currency: json['currency'] == null ? 'INR' : asString(json['currency']),
+        amountUsdt:
+            json['amountUsdt'] == null ? null : asDouble(json['amountUsdt']),
+        usdtRate: json['usdtRate'] == null ? null : asDouble(json['usdtRate']),
       );
 }
 

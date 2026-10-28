@@ -166,4 +166,103 @@ void main() {
 
     expect(find.text('Reply sent from the admin panel'), findsOneWidget);
   });
+
+  group('deposit', () {
+    /// The USDT panel is tall enough to push the button off-screen.
+    Future<void> submitDeposit(WidgetTester tester) async {
+      final button = find.text('Submit deposit');
+      // scrollUntilVisible cannot be used here: the screen has more than one
+      // Scrollable and it refuses to guess.
+      await tester.ensureVisible(button);
+      await tester.pumpAndSettle();
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> openDeposit(WidgetTester tester) async {
+      final addDeposit = find.text('Add deposit');
+      await tester.scrollUntilVisible(addDeposit, 200);
+      await tester.pumpAndSettle();
+      await tester.tap(addDeposit);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('offers both currencies, with INR selected', (tester) async {
+      await pumpApp(tester, loggedIn: true);
+      await openDeposit(tester);
+
+      expect(find.byKey(const Key('currency_INR')), findsOneWidget);
+      expect(find.byKey(const Key('currency_USDT')), findsOneWidget);
+      // The rupee minimum is the USDT minimum at the day's rate.
+      expect(find.textContaining('Minimum ₹270000.00'), findsOneWidget);
+      // No wallet details until USDT is chosen.
+      expect(find.textContaining('TBbwzuMH3nHdY'), findsNothing);
+    });
+
+    testWidgets('USDT shows the address, network and QR', (tester) async {
+      await pumpApp(tester, loggedIn: true);
+      await openDeposit(tester);
+
+      await tester.tap(find.byKey(const Key('currency_USDT')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('TBbwzuMH3nHdYMqft3vNtnvjRtGDVb7LVE'), findsOneWidget);
+      expect(find.text('Network: TRC20 (Tron)'), findsOneWidget);
+      expect(find.byType(Image), findsWidgets);
+      expect(find.textContaining('Minimum 3000 USDT'), findsOneWidget);
+    });
+
+    testWidgets('a USDT amount below the minimum is refused', (tester) async {
+      await pumpApp(tester, loggedIn: true);
+      await openDeposit(tester);
+
+      await tester.tap(find.byKey(const Key('currency_USDT')));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byKey(const Key('depositAmount')), '2999');
+      await tester.enterText(
+        find.byKey(const Key('depositUtr')),
+        'abc123def456',
+      );
+      await submitDeposit(tester);
+
+      expect(find.text('Minimum deposit is 3000 USDT'), findsOneWidget);
+    });
+
+    testWidgets('a USDT deposit is submitted in USDT', (tester) async {
+      final wallet = FakeWalletRepository();
+      await pumpApp(tester, loggedIn: true, wallet: wallet);
+      await openDeposit(tester);
+
+      await tester.tap(find.byKey(const Key('currency_USDT')));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byKey(const Key('depositAmount')), '3000');
+      await tester.pumpAndSettle();
+      // The agent is told what it is worth before submitting.
+      expect(find.textContaining('Credits about ₹270000.00'), findsOneWidget);
+
+      await tester.enterText(
+        find.byKey(const Key('depositUtr')),
+        'abc123def456',
+      );
+      await submitDeposit(tester);
+
+      expect(wallet.lastDepositCurrency, 'USDT');
+    });
+
+    testWidgets('an INR amount below the minimum is refused', (tester) async {
+      await pumpApp(tester, loggedIn: true);
+      await openDeposit(tester);
+
+      await tester.enterText(find.byKey(const Key('depositAmount')), '5000');
+      await tester.enterText(
+        find.byKey(const Key('depositUtr')),
+        '428716503921',
+      );
+      await submitDeposit(tester);
+
+      expect(find.textContaining('Minimum deposit is ₹270000.00'), findsOneWidget);
+    });
+  });
 }

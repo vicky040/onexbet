@@ -100,6 +100,13 @@ class DepositRecordCard extends StatelessWidget {
           const SizedBox(height: 10),
           KvRow('Previous Balance', formatInr(record.previousBalance)),
           KvRow('Amount', formatInr(record.amount)),
+          if (record.isUsdt && record.amountUsdt != null)
+            KvRow(
+              'Sent',
+              '${record.amountUsdt!.toStringAsFixed(2)} USDT'
+              '${record.usdtRate == null ? '' : ' @ ${formatInr(record.usdtRate!)}'}',
+              valueColor: AppColors.primaryBlue,
+            ),
           KvRow(
             'After Balance',
             formatInr(record.afterBalance),
@@ -107,7 +114,12 @@ class DepositRecordCard extends StatelessWidget {
           ),
           if (record.utr != null) ...[
             const SizedBox(height: 6),
-            Text('UTR: ${record.utr}', style: AppTextStyles.muted),
+            Text(
+              '${record.isUsdt ? 'Txn' : 'UTR'}: ${record.utr}',
+              style: AppTextStyles.muted,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ],
         ],
       ),

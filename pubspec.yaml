@@ -68,6 +68,7 @@ flutter:
 
   assets:
     - assets/branding/splash_logo.png
+    - assets/payment/usdt_trc20_qr.jpg
 
   # Inter 4.1 (SIL Open Font License, see assets/fonts/Inter-LICENSE.txt).
   fonts:

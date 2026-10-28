@@ -1,5 +1,6 @@
 import 'package:onexbet/data/models/bank_account.dart';
 import 'package:onexbet/data/models/dashboard_summary.dart';
+import 'package:onexbet/data/models/deposit_config.dart';
 import 'package:onexbet/data/models/messages.dart';
 import 'package:onexbet/data/models/transactions.dart';
 import 'package:onexbet/data/models/txn_status.dart';
@@ -98,6 +99,9 @@ class FakeWalletRepository implements WalletRepository {
 
   final List<OpenPayout> openPayoutList;
 
+  /// What the last createDeposit call was told to use.
+  String? lastDepositCurrency;
+
   @override
   Future<DashboardSummary> summary() async => const DashboardSummary(
         totalBalance: 140474.93,
@@ -167,19 +171,51 @@ class FakeWalletRepository implements WalletRepository {
         ),
       ];
 
+  /// Mirrors the server: 3000 USDT, and the same worth in rupees.
+  static const usdtRate = 90.0;
+
+  @override
+  Future<DepositConfig> depositConfig() async => const DepositConfig(
+        usdtInrRate: usdtRate,
+        currencies: [
+          DepositCurrencyOption(
+            code: 'INR',
+            label: 'Bank transfer',
+            symbol: '₹',
+            minimum: 3000 * usdtRate,
+            referenceLabel: 'UTR / Reference number',
+          ),
+          DepositCurrencyOption(
+            code: 'USDT',
+            label: 'USDT',
+            symbol: 'USDT',
+            minimum: 3000,
+            referenceLabel: 'Transaction hash',
+            address: 'TBbwzuMH3nHdYMqft3vNtnvjRtGDVb7LVE',
+            network: 'TRC20 (Tron)',
+          ),
+        ],
+      );
+
   @override
   Future<DepositRecord> createDeposit({
     required double amount,
     required String utr,
+    String currency = 'INR',
   }) async {
+    lastDepositCurrency = currency;
+    final inr = currency == 'USDT' ? amount * usdtRate : amount;
     return DepositRecord(
       id: 'TXNNEW000001',
       createdAt: DateTime.now(),
       previousBalance: 140474.93,
-      amount: amount,
-      afterBalance: 140474.93 + amount,
+      amount: inr,
+      afterBalance: 140474.93 + inr,
       status: TxnStatus.pending,
       utr: utr,
+      currency: currency,
+      amountUsdt: currency == 'USDT' ? amount : null,
+      usdtRate: currency == 'USDT' ? usdtRate : null,
     );
   }
 }

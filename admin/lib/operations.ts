@@ -99,15 +99,35 @@ const inr = (value: Numeric) =>
 // Deposits
 // ---------------------------------------------------------------------------
 
-/** An agent submits a deposit request. Nothing is credited until approved. */
+/**
+ * An agent submits a deposit request. Nothing is credited until approved.
+ *
+ * A USDT deposit is converted to rupees here, at the rate configured when it
+ * is submitted — the client sends what it sent, never what it is worth. The
+ * rate is stored on the record so a later change cannot alter history.
+ */
 export async function createDeposit(input: {
   agentId: string;
   amount: Numeric;
+  currency?: "INR" | "USDT";
+  usdtRate?: Numeric;
   utr: string;
   proofUrl?: string | null;
   autoApprove?: boolean;
 }): Promise<Deposit> {
-  const amount = money(input.amount);
+  const currency = input.currency ?? "INR";
+  const sent = money(input.amount);
+
+  if (currency === "USDT" && !input.usdtRate) {
+    throw new ApiError(
+      "server_error",
+      "No USDT rate is configured. Ask an admin to set one.",
+    );
+  }
+
+  // The balance is always in rupees.
+  const amount =
+    currency === "USDT" ? money(D(sent).mul(D(input.usdtRate!))) : sent;
 
   return prisma.$transaction(async (tx) => {
     const agent = await tx.agent.findUnique({
@@ -123,6 +143,9 @@ export async function createDeposit(input: {
             reference,
             agentId: input.agentId,
             amount,
+            currency,
+            amountUsdt: currency === "USDT" ? sent : null,
+            usdtRate: currency === "USDT" ? D(input.usdtRate!) : null,
             previousBalance: agent.balance,
             utr: input.utr,
             proofUrl: input.proofUrl ?? null,

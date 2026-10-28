@@ -2,7 +2,7 @@ import { requireAgent } from "@/lib/auth";
 import { getSettings, prisma } from "@/lib/db";
 import { ApiError } from "@/lib/errors";
 import { ok, pageMeta, readBody, readPagination, withRoute } from "@/lib/http";
-import { formatInr } from "@/lib/money";
+import { D, formatInr, toNumber } from "@/lib/money";
 import { createDeposit } from "@/lib/operations";
 import { serializeDeposit } from "@/lib/serializers";
 import { createDepositSchema } from "@/lib/validation";
@@ -29,15 +29,33 @@ export const GET = withRoute(async (request: Request) => {
   return ok(records.map(serializeDeposit), { meta: pageMeta(page, total) });
 });
 
-/** Backs WalletRepository.createDeposit() — the Deposit screen. */
+/**
+ * Backs WalletRepository.createDeposit() — the Deposit screen.
+ *
+ * `amount` is in `currency`. Both currencies have to be worth the same
+ * minimum, so the rupee floor is the USDT minimum valued at the configured
+ * rate rather than a number of its own.
+ */
 export const POST = withRoute(async (request: Request) => {
   const agent = await requireAgent(request);
   const body = await readBody(request, createDepositSchema);
   const settings = await getSettings();
 
-  if (body.amount < Number(settings.minDepositAmount)) {
+  const minUsdt = toNumber(settings.minDepositUsdt);
+  const rate = toNumber(settings.usdtInrRate);
+  const minInr = toNumber(D(settings.minDepositUsdt).mul(settings.usdtInrRate));
+
+  if (body.currency === "USDT") {
+    if (body.amount < minUsdt) {
+      throw ApiError.badRequest(
+        `Minimum deposit is ${minUsdt.toLocaleString("en-IN")} USDT`,
+      );
+    }
+  } else if (body.amount < minInr) {
     throw ApiError.badRequest(
-      `Minimum deposit is ${formatInr(settings.minDepositAmount)}`,
+      `Minimum deposit is ${formatInr(minInr)} (${minUsdt.toLocaleString(
+        "en-IN",
+      )} USDT at ${formatInr(rate)})`,
     );
   }
 
@@ -47,13 +65,15 @@ export const POST = withRoute(async (request: Request) => {
   });
   if (duplicate) {
     throw ApiError.conflict(
-      `This UTR was already submitted on deposit ${duplicate.reference}`,
+      `This reference was already submitted on deposit ${duplicate.reference}`,
     );
   }
 
   const deposit = await createDeposit({
     agentId: agent.id,
     amount: body.amount,
+    currency: body.currency,
+    usdtRate: rate,
     utr: body.utr,
     proofUrl: body.proofUrl,
     autoApprove: settings.autoApproveDeposits,

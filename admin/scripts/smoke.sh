@@ -77,17 +77,44 @@ check "deposits list" "4" "$(curl -s $BASE/api/v1/deposits -H "$AUTH" | node -e 
 check "notifications unread meta" "yes" "$(curl -s $BASE/api/v1/notifications -H "$AUTH" | j meta.unread | grep -qE '^[0-9]+$' && echo yes || echo no)"
 check "support messages" "yes" "$(curl -s $BASE/api/v1/support/messages -H "$AUTH" | j data.0.fromUser | grep -qE 'true|false' && echo yes || echo no)"
 
+echo "=== deposit currencies ==="
+CFG=$(curl -s $BASE/api/v1/deposits/config -H "$AUTH")
+MIN_INR=$(echo "$CFG" | j data.currencies.0.minimum)
+MIN_USDT=$(echo "$CFG" | j data.currencies.1.minimum)
+USDT_RATE=$(echo "$CFG" | j data.usdtInrRate)
+check "config offers INR then USDT" "INR USDT" \
+  "$(echo "$CFG" | j data.currencies.0.code) $(echo "$CFG" | j data.currencies.1.code)"
+check "USDT carries a deposit address" "yes" \
+  "$(echo "$CFG" | j data.currencies.1.address | grep -q '^T' && echo yes || echo no)"
+check "USDT carries a network" "yes" \
+  "$(echo "$CFG" | j data.currencies.1.network | grep -qi trc20 && echo yes || echo no)"
+check "both minimums are worth the same" "yes" \
+  "$(node -e "console.log(Math.abs($MIN_INR - $MIN_USDT * $USDT_RATE) < 0.01 ? 'yes' : 'no')")"
+
 echo "=== agent writes ==="
 NEWDEP=$(curl -s -X POST $BASE/api/v1/deposits -H "$AUTH" -H 'content-type: application/json' \
-  -d '{"amount":12345.67,"utr":"SMOKE'"$RUN"'A"}')
+  -d "{\"amount\":$MIN_INR,\"utr\":\"SMOKE${RUN}A\"}")
 DEPREF=$(echo "$NEWDEP" | j data.reference)
 check "create deposit is pending" "PENDING" "$(echo "$NEWDEP" | j data.status)"
+check "an INR deposit records its currency" "INR" "$(echo "$NEWDEP" | j data.currency)"
 check "duplicate UTR refused" "conflict" \
   "$(curl -s -X POST $BASE/api/v1/deposits -H "$AUTH" -H 'content-type: application/json' \
-     -d '{"amount":500,"utr":"SMOKE'"$RUN"'A"}' | j error.code)"
+     -d "{\"amount\":$MIN_INR,\"utr\":\"SMOKE${RUN}A\"}" | j error.code)"
 check "below minimum refused" "bad_request" \
   "$(curl -s -X POST $BASE/api/v1/deposits -H "$AUTH" -H 'content-type: application/json' \
      -d '{"amount":5,"utr":"SMOKE'"$RUN"'B"}' | j error.code)"
+
+USDTDEP=$(curl -s -X POST $BASE/api/v1/deposits -H "$AUTH" -H 'content-type: application/json' \
+  -d "{\"amount\":$MIN_USDT,\"currency\":\"USDT\",\"utr\":\"SMOKEUSDT${RUN}\"}")
+check "a USDT deposit is accepted" "USDT" "$(echo "$USDTDEP" | j data.currency)"
+check "the server converts USDT to rupees" "yes" \
+  "$(node -e "console.log(Math.abs($(echo "$USDTDEP" | j data.amount) - $MIN_USDT * $USDT_RATE) < 0.01 ? 'yes' : 'no')")"
+check "the rate is recorded on the deposit" "yes" \
+  "$(node -e "console.log($(echo "$USDTDEP" | j data.usdtRate) === $USDT_RATE ? 'yes' : 'no')")"
+check "below the USDT minimum is refused in USDT" "yes" \
+  "$(curl -s -X POST $BASE/api/v1/deposits -H "$AUTH" -H 'content-type: application/json' \
+     -d "{\"amount\":1,\"currency\":\"USDT\",\"utr\":\"SMOKEUSDTLOW${RUN}\"}" \
+     | j error.message | grep -q USDT && echo yes || echo no)"
 
 NEWBANK=$(curl -s -X POST $BASE/api/v1/banks -H "$AUTH" -H 'content-type: application/json' \
   -d '{"bankName":"Kotak","accountHolder":"Sam Tester","accountNumber":"9'"$RUN"'","ifsc":"KKBK0000123","upiId":"sam.kotak@okhdfcbank","limit":50000,"amountLimit":50000,"txnLimit":50000}')
@@ -156,7 +183,7 @@ check "deposits pending meta" "yes" "$(curl -s -b "$JAR" "$BASE/api/admin/deposi
 check "payins volume meta" "yes" "$(curl -s -b "$JAR" $BASE/api/admin/payins | j meta.volume | grep -qE '^[0-9.]+$' && echo yes || echo no)"
 check "banks list" "yes" "$(curl -s -b "$JAR" $BASE/api/admin/banks | j meta.activeCount | grep -qE '^[0-9]+$' && echo yes || echo no)"
 check "support threads" "yes" "$(curl -s -b "$JAR" $BASE/api/admin/support | j data.0.agent.name | grep -q . && echo yes || echo no)"
-check "settings" "100" "$(curl -s -b "$JAR" $BASE/api/admin/settings | j data.minDepositAmount)"
+check "settings expose the USDT minimum" "3000" "$(curl -s -b "$JAR" $BASE/api/admin/settings | j data.minDepositUsdt)"
 check "audit log has entries" "yes" "$(curl -s -b "$JAR" $BASE/api/admin/audit | j data.0.action | grep -q '\.' && echo yes || echo no)"
 
 echo "=== admin writes (the money path) ==="
@@ -166,7 +193,7 @@ check "approve deposit" "COMPLETED" \
   "$(curl -s -b "$JAR" -X POST $BASE/api/admin/deposits/$DEPID/approve -H 'content-type: application/json' \
      -d '{"note":"smoke test"}' | j data.status)"
 BAL_AFTER=$(curl -s $BASE/api/v1/wallet/summary -H "$AUTH" | j data.totalBalance)
-check "balance grew by the deposit" "12345.67" \
+check "balance grew by the deposit" "$(node -e "console.log(Number($MIN_INR).toFixed(2))")" \
   "$(node -e "console.log(($BAL_AFTER - $BAL_BEFORE).toFixed(2))")"
 check "approving twice is refused" "conflict" \
   "$(curl -s -b "$JAR" -X POST $BASE/api/admin/deposits/$DEPID/approve | j error.code)"

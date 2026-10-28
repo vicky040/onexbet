@@ -220,15 +220,42 @@ confirms, and settlement credits amount + commission.
 
 Backs `WalletRepository.deposits()` — the History tab.
 
+### `GET /deposits/config`
+
+What the Deposit screen needs to draw itself — the currencies, their
+minimums and where to send USDT. Read it rather than hardcoding any of it.
+
+```json
+{ "usdtInrRate": 90,
+  "currencies": [
+    { "code": "INR", "label": "Bank transfer", "symbol": "₹",
+      "minimum": 270000, "referenceLabel": "UTR / Reference number" },
+    { "code": "USDT", "label": "USDT", "symbol": "USDT",
+      "minimum": 3000, "referenceLabel": "Transaction hash",
+      "address": "TBbwzuMH3nHdYMqft3vNtnvjRtGDVb7LVE",
+      "network": "TRC20 (Tron)" }
+  ] }
+```
+
+The two minimums are always worth the same: the rupee figure is the USDT
+minimum valued at `usdtInrRate`.
+
 ### `POST /deposits`
 
 ```json
-{ "amount": 12345.67, "utr": "428716503921", "proofUrl": "https://…" }
+{ "amount": 3000, "currency": "USDT", "utr": "<transaction hash>", "proofUrl": "https://…" }
 ```
 
+`currency` is `INR` (the default) or `USDT`, and `amount` is in that
+currency. A USDT deposit is converted to rupees **by the server** at its own
+rate; the response carries `amount` (rupees), `amountUsdt` and `usdtRate`,
+and the rate is stored so a later change cannot alter what was credited.
+
+`utr` is the bank reference for INR and the chain transaction hash for USDT.
+
 → 201, status `PENDING`. Nothing is credited until an admin approves (or
-when `autoApproveDeposits` is on). Refuses amounts under
-`minDepositAmount` (`bad_request`) and a UTR this agent already used
+when `autoApproveDeposits` is on). Refuses amounts under the minimum for the
+chosen currency (`bad_request`) and a reference this agent already used
 (`conflict`).
 
 `proofUrl` is optional and must be a URL — this API does not accept file

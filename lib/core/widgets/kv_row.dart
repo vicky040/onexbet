@@ -15,12 +15,18 @@ class KvRow extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(child: Text(label, style: AppTextStyles.kvLabel)),
           const SizedBox(width: 12),
-          Text(
-            value,
-            style: AppTextStyles.kvValue.copyWith(color: valueColor),
+          // Flexible, so a long value — a UPI id, a chain transaction hash —
+          // wraps instead of overflowing the row.
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: AppTextStyles.kvValue.copyWith(color: valueColor),
+            ),
           ),
         ],
       ),

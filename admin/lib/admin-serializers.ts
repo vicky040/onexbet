@@ -1,4 +1,4 @@
-import { toNumber } from "./money";
+import { D, toNumber } from "./money";
 import { STATUS_LABELS, payoutTxnStatus } from "./serializers";
 import type {
   Admin,
@@ -62,6 +62,10 @@ export function adminDeposit(deposit: WithAgent<Deposit>) {
     agent: agentRef(deposit.agent),
     agentId: deposit.agentId,
     amount: toNumber(deposit.amount),
+    currency: deposit.currency,
+    amountUsdt:
+      deposit.amountUsdt === null ? null : toNumber(deposit.amountUsdt),
+    usdtRate: deposit.usdtRate === null ? null : toNumber(deposit.usdtRate),
     previousBalance: toNumber(deposit.previousBalance),
     afterBalance: deposit.afterBalance === null ? null : toNumber(deposit.afterBalance),
     status: deposit.status,
@@ -172,7 +176,14 @@ export function adminSettings(settings: Settings) {
   return {
     defaultPayinCommissionRate: toNumber(settings.defaultPayinCommissionRate),
     defaultPayoutCommissionRate: toNumber(settings.defaultPayoutCommissionRate),
-    minDepositAmount: toNumber(settings.minDepositAmount),
+    minDepositUsdt: toNumber(settings.minDepositUsdt),
+    usdtInrRate: toNumber(settings.usdtInrRate),
+    /// What the USDT minimum is worth in rupees, which is the INR minimum.
+    minDepositInr: toNumber(
+      D(settings.minDepositUsdt).mul(settings.usdtInrRate),
+    ),
+    usdtDepositAddress: settings.usdtDepositAddress,
+    usdtNetwork: settings.usdtNetwork,
     requiredSecurityDepositUsdt: toNumber(settings.requiredSecurityDepositUsdt),
     supportWelcomeMessage: settings.supportWelcomeMessage,
     signupsEnabled: settings.signupsEnabled,

@@ -34,6 +34,13 @@ class PayoutPaymentCard extends StatelessWidget {
             formatInr(payment.commission),
             valueColor: AppColors.success,
           ),
+          // The commission is paid on top of the amount, so this is what
+          // actually lands in the balance.
+          KvRow(
+            'You receive',
+            formatInr(payment.amount + payment.commission),
+            valueColor: AppColors.primaryBlue,
+          ),
         ],
       ),
     );
@@ -58,6 +65,11 @@ class OpenPayoutCard extends StatelessWidget {
             'Commission',
             formatInr(payout.commission),
             valueColor: AppColors.success,
+          ),
+          KvRow(
+            'You receive',
+            formatInr(payout.amount + payout.commission),
+            valueColor: AppColors.primaryBlue,
           ),
           KvRow('Pay to UPI', payout.upiId),
         ],

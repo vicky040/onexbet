@@ -25,6 +25,13 @@ enum AgentStatus {
   BLOCKED
 }
 
+/// What the agent actually sent. Balances are always in rupees, so a USDT
+/// deposit is converted at the rate in force when it was submitted.
+enum DepositCurrency {
+  INR
+  USDT
+}
+
 /// Mirrors TxnStatus in the Flutter app (lib/data/models/txn_status.dart).
 enum TxnStatus {
   COMPLETED
@@ -184,6 +191,12 @@ model Deposit {
   /// Only set once the deposit is approved.
   afterBalance    Decimal?  @db.Decimal(14, 2)
   status          TxnStatus @default(PENDING)
+  currency        DepositCurrency @default(INR)
+  /// Only for a USDT deposit: what was sent, and the rate it was valued at.
+  /// Stored so a later rate change cannot rewrite what the agent was credited.
+  amountUsdt      Decimal?  @db.Decimal(14, 2)
+  usdtRate        Decimal?  @db.Decimal(12, 4)
+  /// The UTR for a bank transfer, or the chain transaction hash for USDT.
   utr             String
   proofUrl        String?
   reviewedById    String?
@@ -272,7 +285,14 @@ model Settings {
   id                          String   @id @default("default")
   defaultPayinCommissionRate  Decimal  @default(5.50) @db.Decimal(5, 2)
   defaultPayoutCommissionRate Decimal  @default(2.00) @db.Decimal(5, 2)
-  minDepositAmount            Decimal  @default(100) @db.Decimal(14, 2)
+  /// Minimum deposit, in USDT. The rupee minimum is this valued at
+  /// usdtInrRate, so the two are always worth the same.
+  minDepositUsdt              Decimal  @default(3000) @db.Decimal(14, 2)
+  /// What one USDT is worth in rupees. Set by a super admin.
+  usdtInrRate                 Decimal  @default(90) @db.Decimal(12, 4)
+  /// Where agents send USDT, and on which chain.
+  usdtDepositAddress          String   @default("TBbwzuMH3nHdYMqft3vNtnvjRtGDVb7LVE")
+  usdtNetwork                 String   @default("TRC20 (Tron)")
   requiredSecurityDepositUsdt Decimal  @default(1000) @db.Decimal(14, 2)
   supportWelcomeMessage       String   @default("Hi! Welcome to 1XBET agent support. How can we help you today?")
   signupsEnabled              Boolean  @default(true)
