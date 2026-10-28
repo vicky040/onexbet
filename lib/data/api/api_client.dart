@@ -113,9 +113,14 @@ class ApiClient {
     }
 
     try {
-      final streamed =
-          await _http.send(request).timeout(AppConfig.requestTimeout);
-      return http.Response.fromStream(streamed);
+      // The timeout has to cover reading the body as well as opening the
+      // connection. Timing only the send leaves a stalled response stream
+      // hanging forever, which on a phone looks like a frozen splash screen
+      // or a login button that spins and never reports anything.
+      return await _http
+          .send(request)
+          .then(http.Response.fromStream)
+          .timeout(AppConfig.requestTimeout);
     } on TimeoutException {
       throw ApiException.network(
         'The server took too long to respond. Please try again.',

@@ -1,4 +1,7 @@
 import 'dart:convert';
+import 'package:onexbet/core/config/app_config.dart';
+import 'package:fake_async/fake_async.dart';
+import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -289,4 +292,41 @@ void main() {
 
     expect(refreshCalls, 1);
   });
+  group('a response whose body never arrives', () {
+    // Pins the bug behind the frozen splash screen and the login button
+    // that spun forever: the timeout used to cover only opening the
+    // connection, so a stalled body stream hung with no exception.
+    test('times out instead of hanging', () {
+      fakeAsync((async) {
+        final body = StreamController<List<int>>();
+
+        final client = ApiClient(
+          baseUrl: baseUrl,
+          tokens: TokenStore(),
+          httpClient: MockClient.streaming(
+            (request, bodyStream) async => http.StreamedResponse(
+              body.stream, // headers arrive, the body never does
+              200,
+              headers: {'content-type': 'application/json'},
+            ),
+          ),
+        );
+
+        Object? thrown;
+        client.get('/auth/me', authenticated: false).catchError((Object error) {
+          thrown = error;
+          return null;
+        });
+
+        async.elapse(AppConfig.requestTimeout + const Duration(seconds: 5));
+
+        expect(
+          thrown,
+          isA<ApiException>().having((e) => e.code, 'code', 'network'),
+          reason: 'a stalled body must surface as a network error',
+        );
+      });
+    });
+  });
+
 }

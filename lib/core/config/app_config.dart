@@ -23,6 +23,13 @@ abstract final class AppConfig {
   /// How long to wait for a single request before giving up.
   static const requestTimeout = Duration(seconds: 20);
 
+  /// How long the launch screen may wait for "am I still signed in?".
+  ///
+  /// Shorter than [requestTimeout]: the router holds the user on the splash
+  /// until this resolves, so a slow network must drop them at the login
+  /// screen rather than leave them watching the logo.
+  static const sessionRestoreTimeout = Duration(seconds: 8);
+
   /// Where the Android build can be downloaded from.
   ///
   /// ```sh

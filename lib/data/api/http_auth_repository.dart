@@ -1,3 +1,8 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+
+import '../../core/config/app_config.dart';
 import '../models/json.dart';
 import '../models/user.dart';
 import '../repositories/auth_repository.dart';
@@ -21,6 +26,14 @@ class HttpAuthRepository implements AuthRepository {
       return await call();
     } on ApiException catch (error) {
       throw AuthException(error.message);
+    } on AuthException {
+      rethrow;
+    } catch (error) {
+      // Anything unexpected still has to reach the user as a message. An
+      // error that escapes here would propagate past the auth screens'
+      // catch and leave a button that simply does nothing.
+      debugPrint('Unexpected auth failure: $error');
+      throw const AuthException('Something went wrong. Please try again.');
     }
   }
 
@@ -39,7 +52,13 @@ class HttpAuthRepository implements AuthRepository {
     if (!await _tokens.hasSession()) return null;
 
     try {
-      final data = asObject(await _api.get('/auth/me'));
+      final data = asObject(
+        // The launch screen is blocked on this call, so it gets a shorter
+        // leash than an ordinary request.
+        await _api
+            .get('/auth/me')
+            .timeout(AppConfig.sessionRestoreTimeout),
+      );
       return parseResponse(() => User.fromJson(asObject(data['user'])));
     } on ApiException catch (error) {
       // An expired or revoked session is simply "logged out". A network
@@ -50,6 +69,10 @@ class HttpAuthRepository implements AuthRepository {
         return null;
       }
       throw AuthException(error.message);
+    } on TimeoutException {
+      throw const AuthException(
+        'Could not reach the server. Please check your connection and sign in again.',
+      );
     }
   }
 

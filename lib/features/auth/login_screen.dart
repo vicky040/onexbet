@@ -40,6 +40,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           .login(_mobile.text.trim(), _password.text);
     } on AuthException catch (e) {
       if (mounted) showMessage(context, e.message);
+    } catch (e) {
+      // Never leave the button looking like it did nothing.
+      if (mounted) showMessage(context, 'Something went wrong. Please try again.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }

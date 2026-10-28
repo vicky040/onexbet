@@ -236,6 +236,8 @@ class _ChangePasswordDialogState extends ConsumerState<_ChangePasswordDialog> {
       showMessage(context, 'Password changed');
     } on AuthException catch (e) {
       setState(() => _error = e.message);
+    } catch (e) {
+      setState(() => _error = 'Something went wrong. Please try again.');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
