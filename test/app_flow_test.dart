@@ -283,8 +283,10 @@ void main() {
         find.textContaining('1000 USDT held as security'),
         findsOneWidget,
       );
+      // The master plan keeps the lot, so it must not read "0 to your
+      // balance" as though something had gone wrong.
       expect(
-        find.textContaining('2000 USDT held as security'),
+        find.textContaining('All 5000 USDT is held as security'),
         findsOneWidget,
       );
 

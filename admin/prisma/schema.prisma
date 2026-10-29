@@ -35,9 +35,9 @@ enum AgentStatus {
   BLOCKED
 }
 
-/// What the agent actually sent. Balances are always in rupees, so a USDT
-/// deposit is converted at the rate in force when it was submitted.
-enum DepositCurrency {
+/// What was actually sent or handed over. Balances are always in rupees, so
+/// a USDT amount is converted at the rate in force when it was recorded.
+enum Currency {
   INR
   USDT
 }
@@ -162,6 +162,10 @@ model Payin {
   commissionRate  Decimal   @db.Decimal(5, 2)
   commission      Decimal   @db.Decimal(14, 2)
   afterBalance    Decimal   @db.Decimal(14, 2)
+  currency        Currency  @default(INR)
+  /// Only for USDT: what was handed over, and the rate it was valued at.
+  amountUsdt      Decimal?  @db.Decimal(14, 2)
+  usdtRate        Decimal?  @db.Decimal(12, 4)
   /// Bank/UPI reference of the player's transfer.
   txnRef          String
   status          TxnStatus @default(COMPLETED)
@@ -188,6 +192,10 @@ model Payout {
   amount         Decimal      @db.Decimal(14, 2)
   commissionRate Decimal      @db.Decimal(5, 2)
   commission     Decimal      @db.Decimal(14, 2)
+  currency       Currency     @default(INR)
+  /// Only for USDT: what was collected, and the rate it was valued at.
+  amountUsdt     Decimal?     @db.Decimal(14, 2)
+  usdtRate       Decimal?     @db.Decimal(12, 4)
   /// Where the agent must send the money.
   upiId          String
   status         PayoutStatus @default(OPEN)
@@ -218,7 +226,7 @@ model Deposit {
   status          TxnStatus @default(PENDING)
   /// Set when this deposit is buying a plan rather than topping up a float.
   plan            AgentPlan?
-  currency        DepositCurrency @default(INR)
+  currency        Currency  @default(INR)
   /// Only for a USDT deposit: what was sent, and the rate it was valued at.
   /// Stored so a later rate change cannot rewrite what the agent was credited.
   amountUsdt      Decimal?  @db.Decimal(14, 2)
@@ -320,7 +328,7 @@ model Settings {
   masterPlanUsdt              Decimal  @default(5000) @db.Decimal(14, 2)
   /// How much of each plan is held back as security rather than float.
   agentPlanSecurityUsdt       Decimal  @default(1000) @db.Decimal(14, 2)
-  masterPlanSecurityUsdt      Decimal  @default(2000) @db.Decimal(14, 2)
+  masterPlanSecurityUsdt      Decimal  @default(5000) @db.Decimal(14, 2)
   /// Off until bank transfers are ready; USDT only in the meantime.
   bankTransferEnabled         Boolean  @default(false)
   /// What one USDT is worth in rupees. Set by a super admin.

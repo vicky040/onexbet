@@ -79,6 +79,7 @@ export const POST = withRoute(async (request: Request) => {
 
   const payout = await createPayout({
     amount: body.amount,
+    currency: body.currency,
     upiId: body.upiId,
     agentId: body.agentId,
     commissionRate: body.commissionRate,

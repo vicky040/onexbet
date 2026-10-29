@@ -101,6 +101,8 @@ export function serializePayin(payin: Payin) {
     createdAt: iso(payin.createdAt),
     previousBalance: toNumber(payin.previousBalance),
     amount: toNumber(payin.amount),
+    currency: payin.currency,
+    amountUsdt: payin.amountUsdt === null ? null : toNumber(payin.amountUsdt),
     commissionRate: toNumber(payin.commissionRate),
     commission: toNumber(payin.commission),
     afterBalance: toNumber(payin.afterBalance),
@@ -132,6 +134,8 @@ export function serializePayoutPayment(payout: Payout) {
     amount: toNumber(payout.amount),
     commission: toNumber(payout.commission),
     upiId: payout.upiId,
+    currency: payout.currency,
+    amountUsdt: payout.amountUsdt === null ? null : toNumber(payout.amountUsdt),
     /// What it was for, when it was not an ordinary player payout.
     note: payout.note,
     acceptedAt: iso(payout.acceptedAt),

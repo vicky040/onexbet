@@ -399,17 +399,58 @@ export async function rejectDeposit(input: {
  * Records a payin against an agent: their float drops by the amount and
  * their commission is credited.
  */
+/**
+ * Values an amount in rupees, whatever it was handed over in.
+ *
+ * Balances are always in rupees, so a USDT figure is converted at the rate
+ * in force when the record is made, and both the original amount and that
+ * rate are stored — a later rate change must not rewrite history.
+ */
+async function inCurrency(
+  tx: Tx,
+  amount: Numeric,
+  currency: "INR" | "USDT" | undefined,
+): Promise<{
+  amount: Money;
+  currency: "INR" | "USDT";
+  amountUsdt: Money | null;
+  usdtRate: Money | null;
+}> {
+  const sent = money(amount);
+  if (currency !== "USDT") {
+    return { amount: sent, currency: "INR", amountUsdt: null, usdtRate: null };
+  }
+
+  const settings = await tx.settings.findUnique({ where: { id: "default" } });
+  const rate = D(settings?.usdtInrRate ?? 0);
+  if (rate.lte(0)) {
+    throw new ApiError(
+      "server_error",
+      "No USDT rate is configured. Ask an admin to set one.",
+    );
+  }
+
+  return {
+    amount: money(sent.mul(rate)),
+    currency: "USDT",
+    amountUsdt: sent,
+    usdtRate: rate,
+  };
+}
+
 export async function recordPayin(input: {
   agentId: string;
   amount: Numeric;
+  currency?: "INR" | "USDT";
   txnRef: string;
   bankAccountId?: string | null;
   commissionRate?: Numeric;
   adminId?: string | null;
 }): Promise<Payin> {
-  const amount = money(input.amount);
-
   const payin = await prisma.$transaction(async (tx) => {
+    const sent = await inCurrency(tx, input.amount, input.currency);
+    const amount = sent.amount;
+
     const agent = await tx.agent.findUnique({
       where: { id: input.agentId },
       select: { id: true, payinCommissionRate: true },
@@ -442,6 +483,9 @@ export async function recordPayin(input: {
             agentId: input.agentId,
             bankAccountId: input.bankAccountId ?? null,
             amount,
+            currency: sent.currency,
+            amountUsdt: sent.amountUsdt,
+            usdtRate: sent.usdtRate,
             commissionRate: rate,
             commission,
             previousBalance: change.previousBalance,
@@ -489,15 +533,16 @@ export async function recordPayin(input: {
 /** Admin creates a payout, either open to all agents or assigned to one. */
 export async function createPayout(input: {
   amount: Numeric;
+  currency?: "INR" | "USDT";
   upiId: string;
   agentId?: string | null;
   commissionRate?: Numeric;
   note?: string | null;
   adminId: string;
 }): Promise<Payout> {
-  const amount = money(input.amount);
-
   const payout = await prisma.$transaction(async (tx) => {
+    const sent = await inCurrency(tx, input.amount, input.currency);
+    const amount = sent.amount;
     let rate = D(input.commissionRate ?? 0);
 
     if (input.agentId) {
@@ -522,6 +567,9 @@ export async function createPayout(input: {
             reference,
             agentId: input.agentId ?? null,
             amount,
+            currency: sent.currency,
+            amountUsdt: sent.amountUsdt,
+            usdtRate: sent.usdtRate,
             commissionRate: rate,
             commission: commissionOf(amount, rate),
             upiId: input.upiId,

@@ -12,13 +12,23 @@ class PayinRecord {
     required this.afterBalance,
     required this.txnRef,
     this.status = TxnStatus.completed,
+    this.currency = 'INR',
+    this.amountUsdt,
   });
 
   /// The reference code the server assigns, e.g. `APE0Q8VYQV7L`.
   final String id;
   final DateTime createdAt;
   final double previousBalance;
+
+  /// Always in rupees, whatever it was handed over in.
   final double amount;
+
+  /// `INR` or `USDT`: what was actually handed over.
+  final String currency;
+
+  /// Only for USDT: the figure the agent actually dealt in.
+  final double? amountUsdt;
 
   /// Percentage, e.g. `5.5` for 5.50%.
   final double commissionRate;
@@ -40,6 +50,12 @@ class PayinRecord {
         afterBalance: asDouble(json['afterBalance']),
         txnRef: asString(json['txnRef']),
         status: TxnStatus.fromCode(json['status']),
+        currency: json['currency'] == null
+            ? 'INR'
+            : asString(json['currency']),
+        amountUsdt: json['amountUsdt'] == null
+            ? null
+            : asDouble(json['amountUsdt']),
       );
 }
 
@@ -52,6 +68,8 @@ class PayoutPayment {
     required this.status,
     this.upiId = '',
     this.note,
+    this.currency = 'INR',
+    this.amountUsdt,
   });
 
   final String id;
@@ -64,6 +82,10 @@ class PayoutPayment {
   /// What it was for, when it was not an ordinary player payout.
   final String? note;
 
+  /// `INR` or `USDT`: what was actually collected.
+  final String currency;
+  final double? amountUsdt;
+
   factory PayoutPayment.fromJson(Map<String, dynamic> json) => PayoutPayment(
         id: asString(json['id']),
         createdAt: asDate(json['createdAt']),
@@ -72,6 +94,12 @@ class PayoutPayment {
         status: TxnStatus.fromCode(json['status']),
         upiId: asString(json['upiId']),
         note: json['note'] as String?,
+        currency: json['currency'] == null
+            ? 'INR'
+            : asString(json['currency']),
+        amountUsdt: json['amountUsdt'] == null
+            ? null
+            : asDouble(json['amountUsdt']),
       );
 }
 

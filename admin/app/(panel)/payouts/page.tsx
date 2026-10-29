@@ -137,6 +137,11 @@ export default async function PayoutsPage({
       cell: (payout) => (
         <div>
           <Money value={payout.amount.toString()} />
+          {payout.currency === "USDT" && payout.amountUsdt !== null ? (
+            <span className="block text-xs text-muted">
+              {payout.amountUsdt.toString()} USDT
+            </span>
+          ) : null}
           <span className="block text-xs text-success">
             +{formatInr(payout.commission.toString())}
           </span>
@@ -315,6 +320,10 @@ export default async function PayoutsPage({
                 required
                 placeholder="0.00"
               />
+              <Select label="Currency" name="currency" defaultValue="INR">
+                <option value="INR">Rupees</option>
+                <option value="USDT">USDT — converted at today&rsquo;s rate</option>
+              </Select>
               <Field
                 label="Pay to UPI"
                 name="upiId"

@@ -99,7 +99,17 @@ export default async function PayinsPage({
     {
       header: "Amount",
       numeric: true,
-      cell: (payin) => <Money value={payin.amount.toString()} />,
+      cell: (payin) => (
+        <div>
+          <Money value={payin.amount.toString()} />
+          {/* What was actually handed over, when it was not rupees. */}
+          {payin.currency === "USDT" && payin.amountUsdt !== null ? (
+            <span className="block text-xs text-muted">
+              {payin.amountUsdt.toString()} USDT
+            </span>
+          ) : null}
+        </div>
+      ),
     },
     {
       header: "Commission",
@@ -247,6 +257,10 @@ export default async function PayinsPage({
                 required
                 placeholder="0.00"
               />
+              <Select label="Currency" name="currency" defaultValue="INR">
+                <option value="INR">Rupees</option>
+                <option value="USDT">USDT — converted at today&rsquo;s rate</option>
+              </Select>
               <Field
                 label="Player transaction reference"
                 name="txnRef"

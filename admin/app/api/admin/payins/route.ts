@@ -64,6 +64,7 @@ export const POST = withRoute(async (request: Request) => {
   const payin = await recordPayin({
     agentId: body.agentId,
     amount: body.amount,
+    currency: body.currency,
     txnRef: body.txnRef,
     bankAccountId: body.bankAccountId,
     commissionRate: body.commissionRate,

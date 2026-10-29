@@ -188,10 +188,29 @@ It is written as a settled payout, so it appears in **My Payments** labelled
 "Joining plan" and counts towards the earnings screen — which is where an
 agent looks to understand where their opening balance came from.
 
-The security split is set in Settings (`agentPlanSecurityUsdt` 1000,
-`masterPlanSecurityUsdt` 2000) and is converted at the rate **stored on the
-deposit**, not today's, so the split cannot drift if the rate moves before
-an admin reviews it.
+The **Master plan keeps the whole 5000** as security, so a new master opens
+with their commission alone as float — the plan buys the panel and the
+referral code, not a float to trade with.
+
+The split is set in Settings (`agentPlanSecurityUsdt` 1000,
+`masterPlanSecurityUsdt` 5000) and is converted at the rate **stored on the
+deposit**, not today's, so it cannot drift if the rate moves before an admin
+reviews it.
+
+### Recording in USDT
+
+A payin or a payout can be entered in either currency. Balances are always
+in rupees, so a USDT figure is converted by the **server** at the rate in
+Settings, and both the original amount and the rate used are stored on the
+record — the same rule deposits already follow, so a later rate change can
+never rewrite what an agent was credited or charged.
+
+Commission is worked out on the **rupee** value, so a rate change between
+two payins does not quietly change the commission on either.
+
+The currency picker sits next to the amount on both forms, and rupees stay
+the default. In the tables, a USDT record shows what was handed over under
+the rupee figure.
 
 ## Who can do what
 

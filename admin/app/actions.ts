@@ -191,6 +191,7 @@ export async function createPayoutAction(
     const admin = await requireFullAdmin();
     const body = createPayoutSchema.parse({
       amount: form.get("amount"),
+      currency: str(form, "currency"),
       upiId: form.get("upiId"),
       agentId: str(form, "agentId"),
       commissionRate: str(form, "commissionRate"),
@@ -280,6 +281,7 @@ export async function createPayinAction(
     const body = createPayinSchema.parse({
       agentId: form.get("agentId"),
       amount: form.get("amount"),
+      currency: str(form, "currency"),
       txnRef: form.get("txnRef"),
       bankAccountId: str(form, "bankAccountId"),
       commissionRate: str(form, "commissionRate"),

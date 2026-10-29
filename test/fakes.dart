@@ -215,7 +215,7 @@ class FakeWalletRepository implements WalletRepository {
                   description: 'Everything an agent has, plus your own panel.',
                   priceUsdt: 5000,
                   priceInr: 5000 * usdtRate,
-                  securityUsdt: 2000,
+                  securityUsdt: 5000,
                 ),
               ],
         currencies: [

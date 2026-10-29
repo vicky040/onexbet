@@ -111,6 +111,9 @@ export const bankAccountUpdateSchema = bankAccountSchema.partial();
 
 export const setBankActiveSchema = z.object({ isActive: z.boolean() });
 
+/** What an amount was handed over in; the server converts to rupees. */
+export const currencySchema = z.enum(["INR", "USDT"]);
+
 /**
  * `amount` is in `currency`. A USDT deposit is converted to rupees by the
  * server at the configured rate, so the client never decides what a deposit
@@ -121,7 +124,7 @@ export const setBankActiveSchema = z.object({ isActive: z.boolean() });
  */
 export const createDepositSchema = z.object({
   amount: amountSchema,
-  currency: z.enum(["INR", "USDT"]).default("USDT"),
+  currency: currencySchema.default("USDT"),
   /// Required for an agent who has not joined yet; ignored afterwards.
   plan: z.enum(["AGENT", "MASTER"]).optional(),
   utr: z
@@ -190,6 +193,7 @@ export const reviewDepositSchema = z.object({
 export const createPayinSchema = z.object({
   agentId: z.string().min(1, "Choose an agent"),
   amount: amountSchema,
+  currency: currencySchema.optional(),
   txnRef: z.string().trim().min(4, "Enter the player's transaction reference").max(40),
   bankAccountId: z.string().min(1).optional(),
   commissionRate: rateSchema.optional(),
@@ -197,6 +201,7 @@ export const createPayinSchema = z.object({
 
 export const createPayoutSchema = z.object({
   amount: amountSchema,
+  currency: currencySchema.optional(),
   upiId: upiSchema,
   /** Omit to offer the payout to every active agent. */
   agentId: z.string().min(1).optional(),

@@ -313,6 +313,36 @@ check "settled payout re-credited the difference" "$PO_EXPECTED"   "$(node -e "c
 
 check "the agent was told about the correction" "yes"   "$(curl -s $BASE/api/v1/notifications -H "$AUTH" | j data.0.title | grep -qiE 'corrected' && echo yes || echo no)"
 
+echo "=== payin and payout in USDT ==="
+RATE=$(curl -s -b "$JAR" $BASE/api/admin/settings | j data.usdtInrRate)
+
+USDTPAYIN=$(curl -s -b "$JAR" -X POST $BASE/api/admin/payins -H 'content-type: application/json' \
+  -d "{\"agentId\":\"$AGENTID\",\"amount\":100,\"currency\":\"USDT\",\"txnRef\":\"UC$RUN\"}")
+check "a payin can be recorded in USDT" "USDT" "$(echo "$USDTPAYIN" | j data.currency)"
+check "it keeps what was handed over" "100" "$(echo "$USDTPAYIN" | j data.amountUsdt)"
+check "the server values it in rupees" "yes" \
+  "$(node -e "console.log(Math.abs($(echo "$USDTPAYIN" | j data.amount) - 100 * $RATE) < 0.01 ? 'yes' : 'no')")"
+check "the rate used is recorded" "yes" \
+  "$(node -e "console.log($(echo "$USDTPAYIN" | j data.usdtRate) === $RATE ? 'yes' : 'no')")"
+check "commission is charged on the rupee value" "yes" \
+  "$(node -e "
+     const amount = $(echo "$USDTPAYIN" | j data.amount);
+     const rate = $(echo "$USDTPAYIN" | j data.commissionRate);
+     const expected = Math.round(amount * rate) / 100;
+     console.log(Math.abs(expected - $(echo "$USDTPAYIN" | j data.commission)) < 0.02 ? 'yes' : 'no');
+   ")"
+
+USDTPAYOUT=$(curl -s -b "$JAR" -X POST $BASE/api/admin/payouts -H 'content-type: application/json' \
+  -d "{\"amount\":200,\"currency\":\"USDT\",\"upiId\":\"player@okaxis\",\"agentId\":\"$AGENTID\"}")
+check "a payout can be created in USDT" "USDT" "$(echo "$USDTPAYOUT" | j data.currency)"
+check "it keeps what was collected" "200" "$(echo "$USDTPAYOUT" | j data.amountUsdt)"
+check "the server values it in rupees" "yes" \
+  "$(node -e "console.log(Math.abs($(echo "$USDTPAYOUT" | j data.amount) - 200 * $RATE) < 0.01 ? 'yes' : 'no')")"
+
+check "rupees stay the default" "INR" \
+  "$(curl -s -b "$JAR" -X POST $BASE/api/admin/payins -H 'content-type: application/json' \
+     -d "{\"agentId\":\"$AGENTID\",\"amount\":500,\"txnRef\":\"IC$RUN\"}" | j data.currency)"
+
 echo "=== joining plans (a brand new agent) ==="
 NEWMOBILE="9${RUN: -9}"
 SIGNUP=$(curl -s -X POST $BASE/api/v1/auth/signup -H 'content-type: application/json' \
@@ -350,12 +380,12 @@ NEWSUM=$(curl -s $BASE/api/v1/wallet/summary -H "$NEWAUTH")
 NEWBAL=$(echo "$NEWSUM" | j data.totalBalance)
 NEWSEC=$(echo "$NEWSUM" | j data.securityDepositUsdt)
 
-check "2000 USDT of the master plan is held as security" "2000" "$NEWSEC"
-check "the balance is price plus commission less security" "yes" \
+check "the whole master plan is held as security" "5000" "$NEWSEC"
+check "so the opening balance is the commission alone" "yes" \
   "$(node -e "
      const price = 5000 * $PLANRATE;
      const commission = Math.round(price * ($AGENTRATE / 100) * 100) / 100;
-     const security = 2000 * $PLANRATE;
+     const security = 5000 * $PLANRATE;
      const expected = price + commission - security;
      console.log(Math.abs(expected - $NEWBAL) < 0.01 ? 'yes' : 'no');
    ")"

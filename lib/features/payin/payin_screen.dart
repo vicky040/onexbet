@@ -88,6 +88,12 @@ class PayinRecordCard extends StatelessWidget {
           const SizedBox(height: 10),
           KvRow('Previous Balance', formatInr(record.previousBalance)),
           KvRow('Amount', formatInr(record.amount)),
+          if (record.currency == 'USDT' && record.amountUsdt != null)
+            KvRow(
+              'Handed over',
+              '${record.amountUsdt!.toStringAsFixed(2)} USDT',
+              valueColor: AppColors.primaryBlue,
+            ),
           KvRow(
             'Commission',
             '${formatInr(record.commission)} (${formatPercent(record.commissionRate)})',

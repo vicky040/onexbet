@@ -41,6 +41,12 @@ class PayoutPaymentCard extends StatelessWidget {
           ],
           const SizedBox(height: 10),
           KvRow('Amount', formatInr(payment.amount)),
+          if (payment.currency == 'USDT' && payment.amountUsdt != null)
+            KvRow(
+              'Collected',
+              '${payment.amountUsdt!.toStringAsFixed(2)} USDT',
+              valueColor: AppColors.primaryBlue,
+            ),
           KvRow(
             'Commission',
             formatInr(payment.commission),
