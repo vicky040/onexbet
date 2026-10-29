@@ -177,6 +177,11 @@ export const updateAgentSchema = z.object({
   securityDepositUsdt: z.coerce.number().min(0).optional(),
   notes: z.string().trim().max(500).optional(),
   password: passwordSchema.optional(),
+  /**
+   * Which master this agent belongs to. An empty string detaches them;
+   * leaving the field out leaves the link alone.
+   */
+  referredById: z.union([z.string().min(1), z.literal("")]).optional(),
 });
 
 export const adjustBalanceSchema = z.object({

@@ -447,6 +447,42 @@ check "they cannot adjust a balance" "forbidden" \
      -d '{"amount":10,"reason":"nope"}' | j error.code)"
 rm -f "$MJAR"
 
+echo "=== moving an agent between masters ==="
+# The master's cookie jar from the earlier section has been removed.
+MJAR2="$(mktemp -t onexbet-smoke-master2.XXXXXX)"
+curl -s -c "$MJAR2" -X POST $BASE/api/admin/auth/login -H 'content-type: application/json'   -d '{"email":"master@onexbet.app","password":"secret1"}' > /dev/null
+
+LOOSE=$(curl -s -b "$JAR" -X POST $BASE/api/admin/agents -H 'content-type: application/json' \
+  -d "{\"name\":\"Unattached\",\"mobile\":\"9${RUN: -8}7\",\"email\":\"loose$RUN@example.com\",\"password\":\"secret1\"}")
+LOOSEID=$(echo "$LOOSE" | j data.id)
+check "an agent can start under nobody" "null" "$(echo "$LOOSE" | j data.referredById)"
+
+check "a super admin can attach them to a master" "$MASTERID" \
+  "$(curl -s -b "$JAR" -X PATCH $BASE/api/admin/agents/$LOOSEID -H 'content-type: application/json' \
+     -d "{\"referredById\":\"$MASTERID\"}" | j data.referredById)"
+check "the master now sees them" "yes" \
+  "$(curl -s -b "$MJAR2" $BASE/api/admin/agents | grep -q 'Unattached' && echo yes || echo no)"
+
+check "and can be detached again" "null" \
+  "$(curl -s -b "$JAR" -X PATCH $BASE/api/admin/agents/$LOOSEID -H 'content-type: application/json' \
+     -d '{"referredById":""}' | j data.referredById)"
+check "leaving the field out does not detach them" "$MASTERID" \
+  "$(curl -s -b "$JAR" -X PATCH $BASE/api/admin/agents/$LOOSEID -H 'content-type: application/json' \
+     -d "{\"referredById\":\"$MASTERID\"}" > /dev/null; \
+     curl -s -b "$JAR" -X PATCH $BASE/api/admin/agents/$LOOSEID -H 'content-type: application/json' \
+     -d '{"notes":"untouched"}' | j data.referredById)"
+
+check "an agent cannot be their own master" "bad_request" \
+  "$(curl -s -b "$JAR" -X PATCH $BASE/api/admin/agents/$LOOSEID -H 'content-type: application/json' \
+     -d "{\"referredById\":\"$LOOSEID\"}" | j error.code)"
+check "a non-master cannot be chosen as one" "bad_request" \
+  "$(curl -s -b "$JAR" -X PATCH $BASE/api/admin/agents/$MASTERID -H 'content-type: application/json' \
+     -d "{\"referredById\":\"$LOOSEID\"}" | j error.code)"
+check "a master cannot move agents around" "forbidden" \
+  "$(curl -s -b "$MJAR2" -X PATCH $BASE/api/admin/agents/$LOOSEID -H 'content-type: application/json' \
+     -d '{"referredById":""}' | j error.code)"
+rm -f "$MJAR2"
+
 echo "=== admin panel pages render ==="
 for path in / /agents /deposits /payouts /payins /banks /notifications /support /admins /settings /audit; do
   code=$(curl -s -b "$JAR" -o /dev/null -w '%{http_code}' "$BASE$path")

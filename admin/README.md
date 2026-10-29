@@ -208,6 +208,16 @@ agent is put under a master. There is no sign-up to carry a referral code
 any more, so a super admin picks the master from a list; a master creating
 an agent always gets their own.
 
+An existing agent can be moved with the same picker on their detail page.
+Sending `referredById: ""` detaches them, while leaving the field out keeps
+them where they are — so an unrelated edit cannot quietly orphan an agent.
+An agent cannot be their own master, and only an agent on the Master plan
+can be chosen as one. A master may not move agents at all, in or out.
+
+A master's code is minted when their Master deposit is approved and is
+shown in the page header on their detail page, so it can be read off
+without opening a form.
+
 ### Recording in USDT
 
 A payin or a payout can be entered in either currency. Balances are always

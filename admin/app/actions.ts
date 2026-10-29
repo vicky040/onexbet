@@ -392,12 +392,30 @@ export async function updateAgentAction(
       securityDepositUsdt: str(form, "securityDepositUsdt"),
       notes: str(form, "notes"),
       password: str(form, "password"),
+      // Read raw: "" means detach, which str() would swallow as undefined.
+      referredById: form.has("referredById")
+        ? String(form.get("referredById") ?? "")
+        : undefined,
     });
 
     if (scope.isMaster) assertAgentInScope(scope, agentId);
 
     const existing = await prisma.agent.findUnique({ where: { id: agentId } });
     if (!existing) throw ApiError.notFound("Agent");
+
+    if (body.referredById) {
+      if (body.referredById === agentId) {
+        throw ApiError.badRequest("An agent cannot be their own master");
+      }
+      const master = await prisma.agent.findUnique({
+        where: { id: body.referredById },
+        select: { plan: true },
+      });
+      if (!master) throw ApiError.notFound("Master");
+      if (master.plan !== "MASTER") {
+        throw ApiError.badRequest("That agent is not on the Master plan");
+      }
+    }
 
     if (scope.isMaster) {
       const agent = await prisma.agent.update({
@@ -430,6 +448,9 @@ export async function updateAgentAction(
         payoutCommissionRate: body.payoutCommissionRate,
         securityDepositUsdt: body.securityDepositUsdt,
         notes: body.notes,
+        ...(body.referredById === undefined
+          ? {}
+          : { referredById: body.referredById || null }),
         ...(body.password
           ? { passwordHash: await hashPassword(body.password) }
           : {}),

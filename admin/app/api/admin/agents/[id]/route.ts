@@ -102,6 +102,20 @@ export const PATCH = withRoute(async (request: Request, { params }: Params) => {
     throw ApiError.forbidden("Only a super admin can change agent details");
   }
 
+  if (body.referredById) {
+    if (body.referredById === id) {
+      throw ApiError.badRequest("An agent cannot be their own master");
+    }
+    const master = await prisma.agent.findUnique({
+      where: { id: body.referredById },
+      select: { plan: true },
+    });
+    if (!master) throw ApiError.notFound("Master");
+    if (master.plan !== "MASTER") {
+      throw ApiError.badRequest("That agent is not on the Master plan");
+    }
+  }
+
   const agent = await prisma.agent.update({
     where: { id },
     data: scope.isMaster
@@ -117,6 +131,9 @@ export const PATCH = withRoute(async (request: Request, { params }: Params) => {
           payoutCommissionRate: body.payoutCommissionRate,
           securityDepositUsdt: body.securityDepositUsdt,
           notes: body.notes,
+          ...(body.referredById === undefined
+            ? {}
+            : { referredById: body.referredById || null }),
           ...(body.password
             ? { passwordHash: await hashPassword(body.password) }
             : {}),

@@ -48,6 +48,26 @@ export default async function AgentDetailPage({ params }: Params) {
 
   const scope = await adminScope();
   const superAdmin = scope.admin.role === "SUPER_ADMIN";
+
+  // Who this agent can be put under, and who they are under now. Only a
+  // super admin may change it, so a master need not pay for the query.
+  const planLabel = agent.plan === "MASTER" ? "Master" : "Agent";
+
+  const [masters, currentMaster] = await Promise.all([
+    superAdmin
+      ? prisma.agent.findMany({
+          where: { plan: "MASTER", id: { not: id } },
+          select: { id: true, name: true, referralCode: true },
+          orderBy: { name: "asc" },
+        })
+      : Promise.resolve([]),
+    agent.referredById
+      ? prisma.agent.findUnique({
+          where: { id: agent.referredById },
+          select: { name: true, referralCode: true },
+        })
+      : Promise.resolve(null),
+  ]);
   // A master may only look at agents they referred.
   assertAgentInScope(scope, id);
 
@@ -210,7 +230,23 @@ export default async function AgentDetailPage({ params }: Params) {
     <>
       <PageHeader
         title={agent.name}
-        subtitle={`+91 ${agent.mobile} · ${agent.email}`}
+        subtitle={[
+          `+91 ${agent.mobile}`,
+          agent.email,
+          agent.plan === "NONE" ? "No plan" : `${planLabel} plan`,
+          // A master's own code, so it can be read off without opening a
+          // form; and who this agent sits under, if anyone.
+          agent.referralCode ? `Code ${agent.referralCode}` : null,
+          currentMaster
+            ? `Under ${currentMaster.name}${
+                currentMaster.referralCode
+                  ? ` (${currentMaster.referralCode})`
+                  : ""
+              }`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" · ")}
         actions={
           <>
             <StatusBadge status={agent.status} />
@@ -274,6 +310,23 @@ export default async function AgentDetailPage({ params }: Params) {
                   <option value="ACTIVE">Active</option>
                   <option value="PENDING">Pending approval</option>
                   <option value="BLOCKED">Blocked</option>
+                </Select>
+                <Select
+                  label="Belongs to master"
+                  name="referredById"
+                  defaultValue={agent.referredById ?? ""}
+                >
+                  <option value="">
+                    {masters.length === 0
+                      ? "No other masters yet"
+                      : "Not under a master"}
+                  </option>
+                  {masters.map((master) => (
+                    <option key={master.id} value={master.id}>
+                      {master.name}
+                      {master.referralCode ? ` (${master.referralCode})` : ""}
+                    </option>
+                  ))}
                 </Select>
                 <Field
                   label="Security deposit (USDT)"
@@ -375,6 +428,26 @@ export default async function AgentDetailPage({ params }: Params) {
                   {agent.securityDepositUsdt.toString()} USDT
                 </dd>
               </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted">Plan</dt>
+                <dd className="font-semibold">
+                  {agent.plan === "NONE" ? "Not joined" : planLabel}
+                </dd>
+              </div>
+              {agent.referralCode ? (
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted">Master code</dt>
+                  <dd className="tabular font-semibold">
+                    {agent.referralCode}
+                  </dd>
+                </div>
+              ) : null}
+              {currentMaster ? (
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted">Belongs to</dt>
+                  <dd className="font-semibold">{currentMaster.name}</dd>
+                </div>
+              ) : null}
               {agent.notes ? (
                 <div className="pt-2">
                   <dt className="text-muted">Notes</dt>
