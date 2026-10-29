@@ -339,6 +339,18 @@ void main() {
     });
   });
 
+  group('accounts are made by an admin', () {
+    testWidgets('the sign-in screen does not offer a sign-up', (tester) async {
+      await pumpApp(tester);
+
+      expect(find.text('Welcome back'), findsOneWidget);
+      expect(find.text('Sign up'), findsNothing);
+      expect(find.textContaining("Don't have an account"), findsNothing);
+      // Resetting a forgotten password is still the agent's own to do.
+      expect(find.text('Forgot password?'), findsOneWidget);
+    });
+  });
+
   group('startup notices', () {
     testWidgets('the welcome dialog does not appear before signing in',
         (tester) async {

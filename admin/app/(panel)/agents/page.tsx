@@ -62,7 +62,7 @@ export default async function AgentsPage({
       : {}),
   };
 
-  const [agents, total, settings] = await Promise.all([
+  const [agents, total, settings, masters] = await Promise.all([
     prisma.agent.findMany({
       where,
       orderBy: [{ status: "asc" }, { createdAt: "desc" }, { id: "desc" }],
@@ -74,6 +74,14 @@ export default async function AgentsPage({
     }),
     prisma.agent.count({ where }),
     getSettings(),
+    // Who a new agent can be put under. Only a super admin chooses.
+    scope.isMaster
+      ? Promise.resolve([])
+      : prisma.agent.findMany({
+          where: { plan: "MASTER" },
+          select: { id: true, name: true, referralCode: true },
+          orderBy: { name: "asc" },
+        }),
   ]);
 
   const columns: Column<Agent>[] = [
@@ -194,6 +202,24 @@ export default async function AgentsPage({
                   <option value="PENDING">Pending approval</option>
                   <option value="BLOCKED">Blocked</option>
                 </Select>
+                {/* A master's agents are their own, so only a super admin
+                    picks. Without a sign-up there is no referral code to
+                    carry this any more. */}
+                {scope.isMaster ? null : (
+                  <Select label="Belongs to master" name="referredById" defaultValue="">
+                    <option value="">
+                      {masters.length === 0
+                        ? "No masters yet"
+                        : "Not under a master"}
+                    </option>
+                    {masters.map((master) => (
+                      <option key={master.id} value={master.id}>
+                        {master.name}
+                        {master.referralCode ? ` (${master.referralCode})` : ""}
+                      </option>
+                    ))}
+                  </Select>
+                )}
               </div>
               <Textarea label="Internal notes" name="notes" rows={2} />
               <SubmitButton>Create agent</SubmitButton>

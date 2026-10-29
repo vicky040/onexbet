@@ -53,11 +53,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     return AuthScaffold(
       title: 'Welcome back',
       subtitle: 'Log in to manage your payins and payouts.',
-      footer: AuthFooterLink(
-        text: "Don't have an account?",
-        action: 'Sign up',
-        onTap: () => context.go(Routes.signup),
-      ),
+      // Accounts are created by an admin, so there is nothing to sign up to.
       // The promotion is for everyone; the welcome dialog is not, because
       // what it asks for can only be done once signed in.
       banner: ref.watch(appContentProvider).maybeWhen(

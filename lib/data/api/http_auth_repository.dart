@@ -37,7 +37,7 @@ class HttpAuthRepository implements AuthRepository {
     }
   }
 
-  /// Stores the tokens from a login/signup/change-password response.
+  /// Stores the tokens from a login or change-password response.
   Future<void> _saveSession(Map<String, dynamic> data) async {
     final access = data['accessToken'];
     final refresh = data['refreshToken'];
@@ -91,37 +91,6 @@ class HttpAuthRepository implements AuthRepository {
         );
         await _saveSession(data);
         return parseResponse(() => User.fromJson(asObject(data['user'])));
-      });
-
-  @override
-  Future<SignupResult> signup({
-    required String name,
-    required String mobile,
-    required String email,
-    required String password,
-    String? referralCode,
-  }) =>
-      _guard(() async {
-        final data = asObject(
-          await _api.post(
-            '/auth/signup',
-            body: {
-              'referralCode': ?referralCode,
-              'name': name,
-              'mobile': mobile,
-              'email': email,
-              'password': password,
-            },
-            authenticated: false,
-          ),
-        );
-        await _saveSession(data);
-        return parseResponse(
-          () => SignupResult(
-            user: User.fromJson(asObject(data['user'])),
-            pendingApproval: asBool(data['pendingApproval']),
-          ),
-        );
       });
 
   @override

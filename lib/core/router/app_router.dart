@@ -7,7 +7,6 @@ import '../../features/accounts/bank_form_screen.dart';
 import '../../features/auth/auth_controller.dart';
 import '../../features/auth/forgot_password_screen.dart';
 import '../../features/auth/login_screen.dart';
-import '../../features/auth/signup_screen.dart';
 import '../../features/auth/splash_screen.dart';
 import '../../features/deposit/deposit_screen.dart';
 import '../../features/earnings/earnings_screen.dart';
@@ -75,7 +74,6 @@ final routerProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(path: Routes.splash, builder: (_, _) => const SplashScreen()),
       GoRoute(path: Routes.login, builder: (_, _) => const LoginScreen()),
-      GoRoute(path: Routes.signup, builder: (_, _) => const SignupScreen()),
       GoRoute(
         path: Routes.forgotPassword,
         builder: (_, _) => const ForgotPasswordScreen(),

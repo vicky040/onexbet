@@ -77,7 +77,13 @@ void main() {
 
     test('logged out users go to login, auth routes stay', () {
       expect(authRedirect(const AsyncData(null), uri('/home')), '/login');
-      expect(authRedirect(const AsyncData(null), uri('/signup')), isNull);
+      expect(authRedirect(const AsyncData(null), uri('/login')), isNull);
+      expect(
+        authRedirect(const AsyncData(null), uri('/forgot-password')),
+        isNull,
+      );
+      // There is no sign-up any more: an admin creates the account.
+      expect(authRedirect(const AsyncData(null), uri('/signup')), '/login');
     });
 
     test('logged in users leave auth routes and splash', () {

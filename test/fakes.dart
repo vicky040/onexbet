@@ -47,23 +47,6 @@ class FakeAuthRepository implements AuthRepository {
     return _current = testUser;
   }
 
-  /// What the sign-up screen passed through, for the referral test.
-  String? lastSignupReferralCode;
-
-  @override
-  Future<SignupResult> signup({
-    required String name,
-    required String mobile,
-    required String email,
-    required String password,
-    String? referralCode,
-  }) async {
-    lastSignupReferralCode = referralCode;
-    final user = User(name: name, mobile: mobile, email: email);
-    _current = user;
-    return SignupResult(user: user, pendingApproval: false);
-  }
-
   @override
   Future<PasswordResetChallenge> requestPasswordReset({
     required String mobile,

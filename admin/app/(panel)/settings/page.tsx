@@ -228,7 +228,7 @@ export default async function SettingsPage() {
             <Checkbox
               name="signupsEnabled"
               label="Allow new sign-ups from the app"
-              hint="When off, the app's Create account screen is refused."
+              hint="Off by default: agents are created here, under Agents. The current app has no sign-up screen, so turning this on only reopens the endpoint for older installs."
               defaultChecked={settings.signupsEnabled}
             />
             <Checkbox

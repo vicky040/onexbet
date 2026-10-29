@@ -27,26 +27,6 @@ class AuthController extends AsyncNotifier<User?> {
     state = AsyncData(user);
   }
 
-  /// Returns true when the account was created but still needs an admin to
-  /// approve it — there is no session in that case.
-  Future<bool> signup({
-    required String name,
-    required String mobile,
-    required String email,
-    required String password,
-    String? referralCode,
-  }) async {
-    final result = await _repo.signup(
-      name: name,
-      mobile: mobile,
-      email: email,
-      password: password,
-      referralCode: referralCode,
-    );
-    if (!result.pendingApproval) state = AsyncData(result.user);
-    return result.pendingApproval;
-  }
-
   Future<PasswordResetChallenge> requestPasswordReset(String mobile) =>
       _repo.requestPasswordReset(mobile: mobile);
 

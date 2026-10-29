@@ -343,17 +343,26 @@ check "rupees stay the default" "INR" \
   "$(curl -s -b "$JAR" -X POST $BASE/api/admin/payins -H 'content-type: application/json' \
      -d "{\"agentId\":\"$AGENTID\",\"amount\":500,\"txnRef\":\"IC$RUN\"}" | j data.currency)"
 
-echo "=== joining plans (a brand new agent) ==="
+echo "=== accounts are made by an admin, not by signing up ==="
 NEWMOBILE="9${RUN: -9}"
-SIGNUP=$(curl -s -X POST $BASE/api/v1/auth/signup -H 'content-type: application/json' \
-  -d "{\"name\":\"Plan Tester\",\"mobile\":\"$NEWMOBILE\",\"email\":\"plan$RUN@example.com\",\"password\":\"secret1\",\"referralCode\":\"MASTER01\"}")
-check "sign-up with a referral code works" "Plan Tester" "$(echo "$SIGNUP" | j data.user.name)"
-check "a new agent is on no plan yet" "NONE" "$(echo "$SIGNUP" | j data.user.plan)"
-NEWAUTH="authorization: Bearer $(echo "$SIGNUP" | j data.accessToken)"
-
-check "a bad referral code is rejected" "bad_request" \
+check "the public sign-up is closed" "forbidden" \
   "$(curl -s -X POST $BASE/api/v1/auth/signup -H 'content-type: application/json' \
-     -d "{\"name\":\"Nope\",\"mobile\":\"9${RUN: -8}1\",\"email\":\"nope$RUN@example.com\",\"password\":\"secret1\",\"referralCode\":\"NOTACODE\"}" | j error.code)"
+     -d "{\"name\":\"Walk In\",\"mobile\":\"$NEWMOBILE\",\"email\":\"walkin$RUN@example.com\",\"password\":\"secret1\"}" | j error.code)"
+
+# The admin creates the agent instead, and says which master they belong to.
+MASTERID=$(curl -s -b "$JAR" "$BASE/api/admin/agents?q=sam" | j data.0.id)
+MADE=$(curl -s -b "$JAR" -X POST $BASE/api/admin/agents -H 'content-type: application/json' \
+  -d "{\"name\":\"Plan Tester\",\"mobile\":\"$NEWMOBILE\",\"email\":\"plan$RUN@example.com\",\"password\":\"secret1\",\"referredById\":\"$MASTERID\"}")
+check "an admin can create an agent" "Plan Tester" "$(echo "$MADE" | j data.name)"
+check "and put them under a master" "$MASTERID" "$(echo "$MADE" | j data.referredById)"
+check "a new agent is on no plan yet" "NONE" "$(echo "$MADE" | j data.plan)"
+
+NEWAUTH="authorization: Bearer $(curl -s -X POST $BASE/api/v1/auth/login -H 'content-type: application/json' \
+  -d "{\"mobile\":\"$NEWMOBILE\",\"password\":\"secret1\"}" | j data.accessToken)"
+check "that agent can sign in" "Plan Tester" \
+  "$(curl -s $BASE/api/v1/auth/me -H "$NEWAUTH" | j data.user.name)"
+
+echo "=== joining plans ==="
 check "a deposit without a plan is refused" "bad_request" \
   "$(curl -s -X POST $BASE/api/v1/deposits -H "$NEWAUTH" -H 'content-type: application/json' \
      -d "{\"amount\":3000,\"currency\":\"USDT\",\"utr\":\"PLANA$RUN\"}" | j error.code)"

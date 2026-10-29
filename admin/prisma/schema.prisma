@@ -338,7 +338,9 @@ model Settings {
   usdtNetwork                 String   @default("TRC20 (Tron)")
   requiredSecurityDepositUsdt Decimal  @default(1000) @db.Decimal(14, 2)
   supportWelcomeMessage       String   @default("Hi! Welcome to 1XBET agent support. How can we help you today?")
-  signupsEnabled              Boolean  @default(true)
+  /// Agents are created by an admin, so the public sign-up is closed. The
+  /// switch stays so it can be reopened without a release.
+  signupsEnabled              Boolean  @default(false)
   /// Approve agent deposits the moment they are submitted.
   autoApproveDeposits         Boolean  @default(false)
   /// New agents land in PENDING and cannot log in until an admin approves.

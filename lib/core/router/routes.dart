@@ -1,7 +1,6 @@
 abstract final class Routes {
   static const splash = '/splash';
   static const login = '/login';
-  static const signup = '/signup';
   static const forgotPassword = '/forgot-password';
 
   static const home = '/home';
@@ -19,5 +18,5 @@ abstract final class Routes {
   static const support = '/support';
   static const earnings = '/earnings';
 
-  static const authRoutes = {login, signup, forgotPassword};
+  static const authRoutes = {login, forgotPassword};
 }

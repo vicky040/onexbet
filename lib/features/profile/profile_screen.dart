@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/config/app_config.dart';
 import '../../core/router/routes.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_text_styles.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/validators.dart';
 import '../../core/widgets/app_bars.dart';
@@ -122,13 +123,23 @@ class ProfileScreen extends ConsumerWidget {
                   KvRow('Email', user.email),
                   if (user.hasJoined)
                     KvRow('Plan', user.isMaster ? 'Master' : 'Agent'),
-                  // A master shares this with the agents they bring in.
+                  // Quoted to support when a master wants an agent added
+                  // under them. There is no sign-up to enter it into.
                   if (user.referralCode != null)
-                    KvRow('Referral code', user.referralCode!),
+                    KvRow('Your master code', user.referralCode!),
                 ],
               ),
             ),
           ),
+          if (user.referralCode != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+              child: Text(
+                'Give this code to support to have a new agent added under '
+                'you. Accounts are created by the admin team.',
+                style: AppTextStyles.muted,
+              ),
+            ),
           SectionCard(
             title: 'Settings',
             child: InsetPanel(

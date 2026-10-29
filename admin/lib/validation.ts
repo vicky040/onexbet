@@ -155,6 +155,8 @@ export const adminLoginSchema = z.object({
 });
 
 export const createAgentSchema = z.object({
+  /** Which master this agent belongs to, if any. */
+  referredById: z.string().min(1).optional(),
   name: nameSchema,
   mobile: mobileSchema,
   email: emailSchema,

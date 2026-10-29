@@ -9,15 +9,6 @@ class AuthException implements Exception {
   String toString() => message;
 }
 
-/// What a sign-up produced. When the platform requires approval the account
-/// exists but cannot sign in yet, so there is no session.
-class SignupResult {
-  const SignupResult({required this.user, required this.pendingApproval});
-
-  final User user;
-  final bool pendingApproval;
-}
-
 /// A password reset in progress. The server has sent a 6-digit code to the
 /// agent's mobile; [resetToken] ties the code to this attempt.
 class PasswordResetChallenge {
@@ -41,17 +32,6 @@ abstract interface class AuthRepository {
 
   Future<User> login({required String mobile, required String password});
 
-  Future<SignupResult> signup({
-    required String name,
-    required String mobile,
-    required String email,
-    required String password,
-    /// A master's code, when the agent was referred by one.
-    String? referralCode,
-  });
-
-  /// Starts a reset: the server texts a code to [mobile]. Answers the same
-  /// way whether or not the number is registered.
   Future<PasswordResetChallenge> requestPasswordReset({
     required String mobile,
   });

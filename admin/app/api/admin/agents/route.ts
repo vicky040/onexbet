@@ -91,8 +91,12 @@ export const POST = withRoute(async (request: Request) => {
         body.payoutCommissionRate ?? settings.defaultPayoutCommissionRate,
       securityDepositUsdt: scope.isMaster ? 0 : (body.securityDepositUsdt ?? 0),
       notes: scope.isMaster ? null : body.notes,
-      // A master's agents belong to that master.
-      referredById: scope.isMaster ? scope.admin.agentId : null,
+      // A master's agents are always their own; a super admin says which
+      // master the agent belongs to, since there is no sign-up to carry a
+      // referral code any more.
+      referredById: scope.isMaster
+        ? scope.admin.agentId
+        : (body.referredById ?? null),
     },
   });
 

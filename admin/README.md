@@ -197,6 +197,17 @@ The split is set in Settings (`agentPlanSecurityUsdt` 1000,
 deposit**, not today's, so it cannot drift if the rate moves before an admin
 reviews it.
 
+### Who creates an agent
+
+Only an admin. The app has no sign-up screen, and `signupsEnabled` is off,
+so `POST /api/v1/auth/signup` refuses — the switch stays only so the
+endpoint can be reopened for app versions already installed.
+
+That makes **Agents → Add an agent** the one way in, which is also where the
+agent is put under a master. There is no sign-up to carry a referral code
+any more, so a super admin picks the master from a list; a master creating
+an agent always gets their own.
+
 ### Recording in USDT
 
 A payin or a payout can be entered in either currency. Balances are always
